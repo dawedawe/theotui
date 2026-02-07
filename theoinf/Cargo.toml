@@ -1,0 +1,9 @@
+[package]
+name = "theoinf"
+version = "0.1.0"
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+description = "A crate implementing theoretical computer science stuff."
+
+[dependencies]

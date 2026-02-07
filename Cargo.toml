@@ -1,0 +1,8 @@
+[workspace]
+members = ["theoinf", "theotui"]
+resolver = "2"
+
+[workspace.package]
+license = "MIT"
+edition = "2024"
+repository = "https://codeberg.org/dawe/theotui"
