@@ -40,6 +40,8 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     dispatch! {peek(any);
                         '(' => delimited('(',  parser(0).map(|e| Expr::Paren{x: Box::new(e)}), cut_err(')')),
                         _ => alt((
+                            false_lit.map(|_| {Expr::False}),
+                            true_lit.map(|_| {Expr::True}),
                             identifier.map(|s| Expr::Var{name: s.into()}),
                         )),
                     },
@@ -85,6 +87,14 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     .parse_next(i)
 }
 
+fn false_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    trace("false_lit", "false").take().parse_next(i)
+}
+
+fn true_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    trace("true_lit", "true").take().parse_next(i)
+}
+
 pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
     match expr {
         Expr::Var { name: x } => assignment[x.as_str()],
@@ -108,6 +118,15 @@ pub fn run(formula: &str, assignment: &HashMap<&str, bool>) -> Result<bool, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parsing_a_bool_literal_works() {
+        let mut input = "true";
+        let expr = pratt_parser(&mut input);
+        assert!(expr.is_ok());
+        assert_eq!(Expr::True, expr.unwrap());
+        assert_eq!("", input);
+    }
 
     #[test]
     fn parsing_a_var_works() {
@@ -278,13 +297,19 @@ mod tests {
         };
         assert!(eval(&assignment, &expr));
     }
+
     #[test]
     fn run_works() {
-        let mut assignment = HashMap::new();
-        assignment.insert("a", true);
-        assignment.insert("b", true);
-        let r = run("a & b", &assignment);
-        assert!(r.is_ok());
-        assert!(r.unwrap())
+        let assignment = HashMap::new();
+        assert!(!run("false & false", &assignment).unwrap());
+        assert!(!run("false & true", &assignment).unwrap());
+        assert!(!run("true & false", &assignment).unwrap());
+        assert!(run("true & true", &assignment).unwrap());
+    }
+
+    #[test]
+    fn precedence_works() {
+        let assignment = HashMap::new();
+        assert!(run("true | false & false", &assignment).unwrap());
     }
 }
