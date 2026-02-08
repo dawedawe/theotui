@@ -7,3 +7,4 @@ repository.workspace = true
 description = "A crate implementing theoretical computer science stuff."
 
 [dependencies]
+winnow = "0.7.14"

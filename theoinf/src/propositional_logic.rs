@@ -1,7 +1,13 @@
 use std::collections::HashMap;
 
+use winnow::Parser;
+use winnow::Result;
+use winnow::stream::AsChar;
+use winnow::token::take_while;
+
+#[derive(PartialEq, Debug)]
 pub enum Expr<'a> {
-    Val { name: &'a str },
+    Var { name: &'a str },
     Not { x: &'a Expr<'a> },
     Or { x: &'a Expr<'a>, y: &'a Expr<'a> },
     And { x: &'a Expr<'a>, y: &'a Expr<'a> },
@@ -9,9 +15,16 @@ pub enum Expr<'a> {
     False,
 }
 
+pub fn parse_var<'s>(input: &mut &'s str) -> winnow::Result<Expr<'s>> {
+    match take_while(0.., AsChar::is_alpha).parse_next(input) {
+        Result::Ok(v) => Ok(Expr::Var { name: v }),
+        Result::Err(e) => Result::Err(e),
+    }
+}
+
 pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
     match expr {
-        Expr::Val { name: x } => assignment[x],
+        Expr::Var { name: x } => assignment[x],
         Expr::Not { x } => !eval(assignment, x),
         Expr::Or { x, y } => eval(assignment, x) || eval(assignment, y),
         Expr::And { x, y } => eval(assignment, x) && eval(assignment, y),
@@ -25,9 +38,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parsing_a_var_works() {
+        let mut input = "a";
+        let expr = parse_var(&mut input);
+        assert!(expr.is_ok());
+        assert_eq!(Expr::Var { name: "a" }, expr.unwrap());
+        assert_eq!("", input);
+    }
+
+    #[test]
     fn assignment_works() {
-        let a = Expr::Val { name: "a" };
-        let b = Expr::Val { name: "b" };
+        let a = Expr::Var { name: "a" };
+        let b = Expr::Var { name: "b" };
         let mut assignment = HashMap::new();
         assignment.insert("a", false);
         assignment.insert("b", true);
