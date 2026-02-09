@@ -17,6 +17,7 @@ use winnow::error::ErrMode;
 use winnow::stream::AsChar;
 use winnow::token::any;
 use winnow::token::one_of;
+use winnow::token::take;
 use winnow::token::take_while;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -25,6 +26,7 @@ pub enum Expr {
     Not(Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
+    Equi(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
     True,
     False,
@@ -66,6 +68,10 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                         '|' => Left(7, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
+                    dispatch! {take(3usize);
+                        "<=>" =>  Left(6, |_: &mut _, a, b| Ok(Expr::Equi(Box::new(a), Box::new(b)))),
+                        _ => fail
+                    },
                 )),
             )
             .parse_next(i)
@@ -101,6 +107,7 @@ pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
         Expr::Not(x) => !eval(assignment, x),
         Expr::Or(x, y) => eval(assignment, x) || eval(assignment, y),
         Expr::And(x, y) => eval(assignment, x) && eval(assignment, y),
+        Expr::Equi(x, y) => eval(assignment, x) == eval(assignment, y),
         Expr::True => true,
         Expr::False => false,
         Expr::Paren(x) => eval(assignment, x),
@@ -252,6 +259,10 @@ mod tests {
         assert!(!run("false & true", &assignment).unwrap());
         assert!(!run("true & false", &assignment).unwrap());
         assert!(run("true & true", &assignment).unwrap());
+        assert!(run("false <=> false", &assignment).unwrap());
+        assert!(!run("false <=> true", &assignment).unwrap());
+        assert!(!run("true <=> false", &assignment).unwrap());
+        assert!(run("true <=> true", &assignment).unwrap());
     }
 
     #[test]
