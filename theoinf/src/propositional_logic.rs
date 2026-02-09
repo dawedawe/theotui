@@ -21,11 +21,11 @@ use winnow::token::take_while;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
-    Var { name: String },
-    Not { x: Box<Expr> },
-    Or { x: Box<Expr>, y: Box<Expr> },
-    And { x: Box<Expr>, y: Box<Expr> },
-    Paren { x: Box<Expr> },
+    Var(String),
+    Not(Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Paren(Box<Expr>),
     True,
     False,
 }
@@ -38,11 +38,11 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                 delimited(
                     multispace0,
                     dispatch! {peek(any);
-                        '(' => delimited('(',  parser(0).map(|e| Expr::Paren{x: Box::new(e)}), cut_err(')')),
+                        '(' => delimited('(',  parser(0).map(|e| Expr::Paren(Box::new(e))), cut_err(')')),
                         _ => alt((
                             false_lit.map(|_| {Expr::False}),
                             true_lit.map(|_| {Expr::True}),
-                            identifier.map(|s| Expr::Var{name: s.into()}),
+                            identifier.map(|s| Expr::Var( s.into())),
                         )),
                     },
                     multispace0,
@@ -53,7 +53,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                 delimited(
                     multispace0,
                     dispatch! {any;
-                        '!' => Prefix(18, |_: &mut _, a| Ok(Expr::Not{x: Box::new(a)})),
+                        '!' => Prefix(18, |_: &mut _, a| Ok(Expr::Not(Box::new(a)))),
                         _ => fail
                     },
                     multispace0,
@@ -62,8 +62,8 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             .infix(
                 alt((
                     dispatch! {any;
-                        '&' => Left(8, |_: &mut _, a, b| Ok(Expr::And{x: Box::new(a), y:Box::new(b)})),
-                        '|' => Left(7, |_: &mut _, a, b| Ok(Expr::Or{x: Box::new(a), y:Box::new(b)})),
+                        '&' => Left(8, |_: &mut _, a, b| Ok(Expr::And(Box::new(a), Box::new(b)))),
+                        '|' => Left(7, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -97,13 +97,13 @@ fn true_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
 
 pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
     match expr {
-        Expr::Var { name: x } => assignment[x.as_str()],
-        Expr::Not { x } => !eval(assignment, x),
-        Expr::Or { x, y } => eval(assignment, x) || eval(assignment, y),
-        Expr::And { x, y } => eval(assignment, x) && eval(assignment, y),
+        Expr::Var(x) => assignment[x.as_str()],
+        Expr::Not(x) => !eval(assignment, x),
+        Expr::Or(x, y) => eval(assignment, x) || eval(assignment, y),
+        Expr::And(x, y) => eval(assignment, x) && eval(assignment, y),
         Expr::True => true,
         Expr::False => false,
-        Expr::Paren { x } => eval(assignment, x),
+        Expr::Paren(x) => eval(assignment, x),
     }
 }
 
@@ -133,12 +133,7 @@ mod tests {
         let mut input = "a";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        assert_eq!(
-            Expr::Var {
-                name: "a".to_string()
-            },
-            expr.unwrap()
-        );
+        assert_eq!(Expr::Var("a".to_string()), expr.unwrap());
         assert_eq!("", input);
     }
 
@@ -148,11 +143,7 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::Paren {
-                x: Box::new(Expr::Var {
-                    name: "a".to_string()
-                })
-            },
+            Expr::Paren(Box::new(Expr::Var("a".to_string()))),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -164,11 +155,7 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::Not {
-                x: Box::new(Expr::Var {
-                    name: "a".to_string()
-                })
-            },
+            Expr::Not(Box::new(Expr::Var("a".to_string()))),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -180,14 +167,10 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::Or {
-                x: Box::new(Expr::Var {
-                    name: "a".to_string()
-                }),
-                y: Box::new(Expr::Var {
-                    name: "b".to_string()
-                })
-            },
+            Expr::Or(
+                Box::new(Expr::Var("a".to_string())),
+                Box::new(Expr::Var("b".to_string()))
+            ),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -199,14 +182,10 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::And {
-                x: Box::new(Expr::Var {
-                    name: "a".to_string()
-                }),
-                y: Box::new(Expr::Var {
-                    name: "b".to_string()
-                })
-            },
+            Expr::And(
+                Box::new(Expr::Var("a".to_string())),
+                Box::new(Expr::Var("b".to_string()))
+            ),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -214,12 +193,8 @@ mod tests {
 
     #[test]
     fn assignment_works() {
-        let a = Expr::Var {
-            name: "a".to_string(),
-        };
-        let b = Expr::Var {
-            name: "b".to_string(),
-        };
+        let a = Expr::Var("a".to_string());
+        let b = Expr::Var("b".to_string());
         let mut assignment = HashMap::new();
         assignment.insert("a", false);
         assignment.insert("b", true);
@@ -230,12 +205,8 @@ mod tests {
     #[test]
     fn not_works() {
         let assignment = HashMap::new();
-        let not_true = Expr::Not {
-            x: Box::new(Expr::True),
-        };
-        let not_false = Expr::Not {
-            x: Box::new(Expr::False),
-        };
+        let not_true = Expr::Not(Box::new(Expr::True));
+        let not_false = Expr::Not(Box::new(Expr::False));
         assert!(!eval(&assignment, &not_true));
         assert!(eval(&assignment, &not_false))
     }
@@ -244,28 +215,16 @@ mod tests {
     fn or_works() {
         let assignment = HashMap::new();
 
-        let expr = Expr::Or {
-            x: Box::new(Expr::False),
-            y: Box::new(Expr::False),
-        };
+        let expr = Expr::Or(Box::new(Expr::False), Box::new(Expr::False));
         assert!(!eval(&assignment, &expr));
 
-        let expr = Expr::Or {
-            x: Box::new(Expr::False),
-            y: Box::new(Expr::True),
-        };
+        let expr = Expr::Or(Box::new(Expr::False), Box::new(Expr::True));
         assert!(eval(&assignment, &expr));
 
-        let expr = Expr::Or {
-            x: Box::new(Expr::True),
-            y: Box::new(Expr::False),
-        };
+        let expr = Expr::Or(Box::new(Expr::True), Box::new(Expr::False));
         assert!(eval(&assignment, &expr));
 
-        let expr = Expr::Or {
-            x: Box::new(Expr::True),
-            y: Box::new(Expr::True),
-        };
+        let expr = Expr::Or(Box::new(Expr::True), Box::new(Expr::True));
         assert!(eval(&assignment, &expr));
     }
 
@@ -273,28 +232,16 @@ mod tests {
     fn and_works() {
         let assignment = HashMap::new();
 
-        let expr = Expr::And {
-            x: Box::new(Expr::False),
-            y: Box::new(Expr::False),
-        };
+        let expr = Expr::And(Box::new(Expr::False), Box::new(Expr::False));
         assert!(!eval(&assignment, &expr));
 
-        let expr = Expr::And {
-            x: Box::new(Expr::False),
-            y: Box::new(Expr::True),
-        };
+        let expr = Expr::And(Box::new(Expr::False), Box::new(Expr::True));
         assert!(!eval(&assignment, &expr));
 
-        let expr = Expr::And {
-            x: Box::new(Expr::True),
-            y: Box::new(Expr::False),
-        };
+        let expr = Expr::And(Box::new(Expr::True), Box::new(Expr::False));
         assert!(!eval(&assignment, &expr));
 
-        let expr = Expr::And {
-            x: Box::new(Expr::True),
-            y: Box::new(Expr::True),
-        };
+        let expr = Expr::And(Box::new(Expr::True), Box::new(Expr::True));
         assert!(eval(&assignment, &expr));
     }
 
