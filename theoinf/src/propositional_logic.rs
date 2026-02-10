@@ -27,6 +27,7 @@ pub enum Expr {
     Or(Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Equi(Box<Expr>, Box<Expr>),
+    Impl(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
     True,
     False,
@@ -55,7 +56,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                 delimited(
                     multispace0,
                     dispatch! {any;
-                        '!' => Prefix(18, |_: &mut _, a| Ok(Expr::Not(Box::new(a)))),
+                        '!' => Prefix(100, |_: &mut _, a| Ok(Expr::Not(Box::new(a)))),
                         _ => fail
                     },
                     multispace0,
@@ -64,12 +65,16 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             .infix(
                 alt((
                     dispatch! {any;
-                        '&' => Left(8, |_: &mut _, a, b| Ok(Expr::And(Box::new(a), Box::new(b)))),
-                        '|' => Left(7, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
+                        '&' => Left(4, |_: &mut _, a, b| Ok(Expr::And(Box::new(a), Box::new(b)))),
+                        '|' => Left(3, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                     dispatch! {take(3usize);
-                        "<=>" =>  Left(6, |_: &mut _, a, b| Ok(Expr::Equi(Box::new(a), Box::new(b)))),
+                        "<=>" =>  Left(1, |_: &mut _, a, b| Ok(Expr::Equi(Box::new(a), Box::new(b)))),
+                        _ => fail
+                    },
+                    dispatch! {take(2usize);
+                        "->" =>  Left(2, |_: &mut _, a, b| Ok(Expr::Impl(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -103,14 +108,15 @@ fn true_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
 
 pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
     match expr {
-        Expr::Var(x) => assignment[x.as_str()],
-        Expr::Not(x) => !eval(assignment, x),
-        Expr::Or(x, y) => eval(assignment, x) || eval(assignment, y),
-        Expr::And(x, y) => eval(assignment, x) && eval(assignment, y),
-        Expr::Equi(x, y) => eval(assignment, x) == eval(assignment, y),
+        Expr::Var(a) => assignment[a.as_str()],
+        Expr::Not(a) => !eval(assignment, a),
+        Expr::Or(a, b) => eval(assignment, a) || eval(assignment, b),
+        Expr::And(a, b) => eval(assignment, a) && eval(assignment, b),
+        Expr::Equi(a, b) => eval(assignment, a) == eval(assignment, b),
+        Expr::Impl(a, b) => !eval(assignment, a) || eval(assignment, b), // a -> b <=> !a v b
         Expr::True => true,
         Expr::False => false,
-        Expr::Paren(x) => eval(assignment, x),
+        Expr::Paren(a) => eval(assignment, a),
     }
 }
 
@@ -255,19 +261,49 @@ mod tests {
     #[test]
     fn run_works() {
         let assignment = HashMap::new();
+        assert!(run("!false", &assignment).unwrap());
+        assert!(!run("!true", &assignment).unwrap());
+
         assert!(!run("false & false", &assignment).unwrap());
         assert!(!run("false & true", &assignment).unwrap());
         assert!(!run("true & false", &assignment).unwrap());
         assert!(run("true & true", &assignment).unwrap());
+
         assert!(run("false <=> false", &assignment).unwrap());
         assert!(!run("false <=> true", &assignment).unwrap());
         assert!(!run("true <=> false", &assignment).unwrap());
         assert!(run("true <=> true", &assignment).unwrap());
+
+        assert!(run("false -> false", &assignment).unwrap());
+        assert!(run("false -> true", &assignment).unwrap());
+        assert!(!run("true -> false", &assignment).unwrap());
+        assert!(run("true -> true", &assignment).unwrap());
     }
 
     #[test]
     fn precedence_works() {
         let assignment = HashMap::new();
         assert!(run("true | false & false", &assignment).unwrap());
+    }
+
+    #[test]
+    fn material_implication_works() {
+        let mut assignment = HashMap::new();
+
+        assignment.insert("a", false);
+        assignment.insert("b", false);
+        assert!(run("a -> b <=> !a | b", &assignment).unwrap());
+
+        assignment.insert("a", false);
+        assignment.insert("b", true);
+        assert!(run("a -> b <=> !a | b", &assignment).unwrap());
+
+        assignment.insert("a", true);
+        assignment.insert("b", false);
+        assert!(run("a -> b <=> !a | b", &assignment).unwrap());
+
+        assignment.insert("a", true);
+        assignment.insert("b", true);
+        assert!(run("a -> b <=> !a | b", &assignment).unwrap());
     }
 }
