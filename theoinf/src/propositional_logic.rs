@@ -22,15 +22,43 @@ use winnow::token::take_while;
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
+    True,
+    False,
     Var(String),
     Not(Box<Expr>),
-    Or(Box<Expr>, Box<Expr>),
     And(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
     Equi(Box<Expr>, Box<Expr>),
     Impl(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
-    True,
-    False,
+}
+
+impl Expr {
+    pub fn collect_vars(&self) -> Vec<String> {
+        let mut vars = vec![];
+        fn helper(expr: &Expr, vars: &mut Vec<String>) {
+            match expr {
+                Expr::Var(a) => vars.push(a.to_string()),
+                Expr::Not(expr) => helper(expr, vars),
+                Expr::And(a, b) | Expr::Or(a, b) | Expr::Equi(a, b) | Expr::Impl(a, b) => {
+                    let a_vars = a.collect_vars();
+                    a_vars.into_iter().for_each(|v| vars.push(v));
+                    let b_vars = b.collect_vars();
+                    b_vars.into_iter().for_each(|v| vars.push(v));
+                }
+                Expr::Paren(a) => {
+                    let a_vars = a.collect_vars();
+                    a_vars.into_iter().for_each(|v| vars.push(v));
+                }
+                Expr::True => (),
+                Expr::False => (),
+            }
+        }
+        helper(self, &mut vars);
+        vars.sort();
+        vars.dedup();
+        vars
+    }
 }
 
 pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
@@ -126,6 +154,28 @@ pub fn run(formula: &str, assignment: &HashMap<&str, bool>) -> Result<bool, Stri
         Ok(expr) => Ok(eval(assignment, &expr)),
         Err(e) => Result::Err(e.to_string()),
     }
+}
+
+pub fn all_assignments(vars: Vec<String>) -> Vec<HashMap<String, bool>> {
+    let mut assignments: Vec<HashMap<String, bool>> = vec![];
+    let s = vars.len();
+    if s > 0 {
+        for bit_assignment in 0..2usize.pow(s as u32) {
+            let mut assignment = HashMap::new();
+            (0..s).for_each(|idx| {
+                let a = (bit_assignment >> idx) & 0x01 == 1;
+                assignment.insert(vars[idx].to_string(), a);
+            });
+            assignments.push(assignment);
+        }
+    }
+    assignments
+}
+
+pub fn print_assignment(assignment: &HashMap<String, bool>) {
+    assignment
+        .iter()
+        .for_each(|a| println!("{} = {}", a.0, a.1));
 }
 
 #[cfg(test)]
@@ -305,5 +355,54 @@ mod tests {
         assignment.insert("a", true);
         assignment.insert("b", true);
         assert!(run("a -> b <=> !a | b", &assignment).unwrap());
+    }
+
+    #[test]
+    fn collect_vars_works() {
+        let expr = pratt_parser(&mut "a").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a"]);
+
+        let expr = pratt_parser(&mut "!a").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a"]);
+
+        let expr = pratt_parser(&mut "a | b").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a", "b"]);
+
+        let expr = pratt_parser(&mut "a & b").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a", "b"]);
+
+        let expr = pratt_parser(&mut "a <=> b").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a", "b"]);
+
+        let expr = pratt_parser(&mut "a -> b").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a", "b"]);
+
+        let expr = pratt_parser(&mut "b -> (a -> b)").unwrap();
+        let vars = expr.collect_vars();
+        assert_eq!(vars, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn all_assignments_works() {
+        let expr = pratt_parser(&mut "true").unwrap();
+        let vars = expr.collect_vars();
+        let assignments = all_assignments(vars);
+        assert_eq!(assignments.len(), 0);
+
+        let expr = pratt_parser(&mut "a").unwrap();
+        let vars = expr.collect_vars();
+        let assignments = all_assignments(vars);
+        assert_eq!(assignments.len(), 2);
+
+        let expr = pratt_parser(&mut "a & b | c -> d").unwrap();
+        let vars = expr.collect_vars();
+        let assignments = all_assignments(vars);
+        assert_eq!(assignments.len(), 16);
     }
 }
