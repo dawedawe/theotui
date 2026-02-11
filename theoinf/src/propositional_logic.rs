@@ -38,7 +38,7 @@ impl Expr {
         let mut vars = vec![];
         fn helper(expr: &Expr, vars: &mut Vec<String>) {
             match expr {
-                Expr::Var(a) => vars.push(a.to_string()),
+                Expr::Var(a) => vars.push(a.into()),
                 Expr::Not(expr) => helper(expr, vars),
                 Expr::And(a, b) | Expr::Or(a, b) | Expr::Equi(a, b) | Expr::Impl(a, b) => {
                     let a_vars = a.collect_vars();
@@ -134,7 +134,7 @@ fn true_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     trace("true_lit", "true").take().parse_next(i)
 }
 
-pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
+pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
     match expr {
         Expr::Var(a) => assignment[a.as_str()],
         Expr::Not(a) => !eval(assignment, a),
@@ -148,16 +148,19 @@ pub fn eval(assignment: &HashMap<&str, bool>, expr: &Expr) -> bool {
     }
 }
 
-pub fn run(formula: &str, assignment: &HashMap<&str, bool>) -> Result<bool, String> {
-    let input = formula.to_string().clone();
+pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
+    let input = formula.to_string();
     match pratt_parser(&mut input.as_str()) {
         Ok(expr) => Ok(eval(assignment, &expr)),
         Err(e) => Result::Err(e.to_string()),
     }
 }
 
-pub fn all_assignments(vars: Vec<String>) -> Vec<HashMap<String, bool>> {
-    let mut assignments: Vec<HashMap<String, bool>> = vec![];
+type Assignment = HashMap<String, bool>;
+type TruthTable = Vec<(Assignment, bool)>;
+
+pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
+    let mut assignments = vec![];
     let s = vars.len();
     if s > 0 {
         for bit_assignment in 0..2usize.pow(s as u32) {
@@ -172,10 +175,37 @@ pub fn all_assignments(vars: Vec<String>) -> Vec<HashMap<String, bool>> {
     assignments
 }
 
-pub fn print_assignment(assignment: &HashMap<String, bool>) {
-    assignment
-        .iter()
-        .for_each(|a| println!("{} = {}", a.0, a.1));
+pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
+    let input = formula.to_string();
+    match pratt_parser(&mut input.as_str()) {
+        Ok(expr) => {
+            let vars = expr.collect_vars();
+            let assignments = all_assignments(vars);
+            let mut tables: TruthTable = vec![];
+            assignments.into_iter().for_each(|a| {
+                let r = eval(&a, &expr);
+                let row = (a, r);
+                tables.push(row);
+            });
+            std::result::Result::Ok(tables)
+        }
+        ModalResult::Err(_) => std::result::Result::Err("parse error".to_string()),
+    }
+}
+
+pub fn print_assignment(assignment: &Assignment) {
+    let mut keys: Vec<&String> = assignment.keys().collect();
+    keys.sort();
+    for k in keys {
+        print!("{} = {} ", k, assignment[k])
+    }
+}
+
+pub fn print_truth_table(table: &TruthTable) {
+    table.iter().for_each(|(a, r)| {
+        print_assignment(a);
+        println!(" => {r}");
+    });
 }
 
 #[cfg(test)]
@@ -259,8 +289,8 @@ mod tests {
         let a = Expr::Var("a".to_string());
         let b = Expr::Var("b".to_string());
         let mut assignment = HashMap::new();
-        assignment.insert("a", false);
-        assignment.insert("b", true);
+        assignment.insert("a".into(), false);
+        assignment.insert("b".into(), true);
         assert!(!eval(&assignment, &a));
         assert!(eval(&assignment, &b))
     }
@@ -340,20 +370,20 @@ mod tests {
     fn material_implication_works() {
         let mut assignment = HashMap::new();
 
-        assignment.insert("a", false);
-        assignment.insert("b", false);
+        assignment.insert("a".into(), false);
+        assignment.insert("b".into(), false);
         assert!(run("a -> b <=> !a | b", &assignment).unwrap());
 
-        assignment.insert("a", false);
-        assignment.insert("b", true);
+        assignment.insert("a".into(), false);
+        assignment.insert("b".into(), true);
         assert!(run("a -> b <=> !a | b", &assignment).unwrap());
 
-        assignment.insert("a", true);
-        assignment.insert("b", false);
+        assignment.insert("a".into(), true);
+        assignment.insert("b".into(), false);
         assert!(run("a -> b <=> !a | b", &assignment).unwrap());
 
-        assignment.insert("a", true);
-        assignment.insert("b", true);
+        assignment.insert("a".into(), true);
+        assignment.insert("b".into(), true);
         assert!(run("a -> b <=> !a | b", &assignment).unwrap());
     }
 
@@ -404,5 +434,13 @@ mod tests {
         let vars = expr.collect_vars();
         let assignments = all_assignments(vars);
         assert_eq!(assignments.len(), 16);
+    }
+
+    #[test]
+    fn truth_table_works() {
+        let table = truth_table("a | b");
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        assert_eq!(table.len(), 4);
     }
 }
