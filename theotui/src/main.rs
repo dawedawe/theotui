@@ -1,7 +1,24 @@
-use theoinf::propositional_logic::{print_truth_table, truth_table};
-fn main() {
-    let formula = "a <=> b";
-    println!("{formula}");
-    let tt = truth_table(formula);
-    print_truth_table(&tt.unwrap());
+pub(crate) mod model;
+pub(crate) mod update;
+pub(crate) mod view;
+
+use color_eyre::eyre::Ok;
+use model::Model;
+use update::{handle_event, update};
+use view::view;
+
+fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
+    let mut terminal = ratatui::init();
+    let mut model = Model::default();
+
+    while model.running {
+        terminal.draw(|f| view(&mut model, f))?;
+        if let Some(msg) = handle_event(&mut model)? {
+            update(&mut model, msg)
+        }
+    }
+
+    ratatui::restore();
+    Ok(())
 }
