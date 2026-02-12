@@ -8,3 +8,6 @@ description = "A crate implementing a TUI for theoretical computer science stuff
 
 [dependencies]
 theoinf = { path = "../theoinf", version = "0.1.0"}
+ratatui = "0.30.0"
+color-eyre = "0.6.5"
+tui-input = "0.15.0"
