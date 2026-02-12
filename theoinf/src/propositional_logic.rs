@@ -156,10 +156,19 @@ pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
     }
 }
 
-type Assignment = HashMap<String, bool>;
-type TruthTable = Vec<(Assignment, bool)>;
+pub type Assignment = HashMap<String, bool>;
+pub type TruthTable = Vec<(Assignment, bool)>;
+
+pub fn formula_vars(assignment: &Assignment) -> Vec<String> {
+    let mut keys: Vec<String> = assignment.keys().cloned().collect();
+    keys.sort();
+    keys
+}
 
 pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
+    let mut vars = vars.clone();
+    vars.sort();
+    vars.reverse();
     let mut assignments = vec![];
     let s = vars.len();
     if s > 0 {
