@@ -157,12 +157,38 @@ pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
 }
 
 pub type Assignment = HashMap<String, bool>;
-pub type TruthTable = Vec<(Assignment, bool)>;
 
-pub fn formula_vars(assignment: &Assignment) -> Vec<String> {
-    let mut keys: Vec<String> = assignment.keys().cloned().collect();
-    keys.sort();
-    keys
+#[derive(Clone, Debug, PartialEq)]
+pub struct TruthTable {
+    pub rows: Vec<(Assignment, bool)>,
+}
+
+impl TruthTable {
+    pub fn new() -> Self {
+        TruthTable { rows: vec![] }
+    }
+    pub fn is_sat(&self) -> bool {
+        self.rows.iter().any(|e| e.1)
+    }
+    pub fn is_tautology(&self) -> bool {
+        self.rows.iter().all(|e| e.1)
+    }
+    pub fn is_contradiction(&self) -> bool {
+        self.rows.iter().all(|e| !e.1)
+    }
+    pub fn vars(&self) -> Vec<String> {
+        if self.rows.is_empty() {
+            vec![]
+        } else {
+            self.rows[0].0.keys().map(|s| s.to_string()).collect()
+        }
+    }
+}
+
+impl Default for TruthTable {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
@@ -190,13 +216,13 @@ pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
         Ok(expr) => {
             let vars = expr.collect_vars();
             let assignments = all_assignments(vars);
-            let mut tables: TruthTable = vec![];
+            let mut table = TruthTable::new();
             assignments.into_iter().for_each(|a| {
                 let r = eval(&a, &expr);
                 let row = (a, r);
-                tables.push(row);
+                table.rows.push(row);
             });
-            std::result::Result::Ok(tables)
+            std::result::Result::Ok(table)
         }
         ModalResult::Err(_) => std::result::Result::Err("parse error".to_string()),
     }
@@ -211,7 +237,7 @@ pub fn print_assignment(assignment: &Assignment) {
 }
 
 pub fn print_truth_table(table: &TruthTable) {
-    table.iter().for_each(|(a, r)| {
+    table.rows.iter().for_each(|(a, r)| {
         print_assignment(a);
         println!(" => {r}");
     });
@@ -450,6 +476,6 @@ mod tests {
         let table = truth_table("a | b");
         assert!(table.is_ok());
         let table = table.unwrap();
-        assert_eq!(table.len(), 4);
+        assert_eq!(table.rows.len(), 4);
     }
 }
