@@ -45,23 +45,23 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             model.running = false;
         }
         Msg::Eval => {
-            let tables =
+            let table =
                 theoinf::propositional_logic::truth_table(model.formula_input_state.value.as_str());
-            match tables {
-                Ok(tables) if !tables.is_empty() => {
+            match table {
+                Ok(table) if !table.rows.is_empty() => {
                     model.truth_table_state.select(Some(0));
-                    model.truth_table_scroll_state = ScrollbarState::new(tables.len());
-                    model.output = PropLogicOutput::Table(tables);
+                    model.truth_table_scroll_state = ScrollbarState::new(table.rows.len());
+                    model.output = PropLogicOutput::Table(table);
                 }
                 Ok(_) => {
                     let assignment: Assignment = HashMap::new();
                     let r = run(model.formula_input_state.value.as_str(), &assignment);
                     match r {
-                        Ok(y) => model.output = PropLogicOutput::Literal(y.to_string()),
-                        Err(e) => model.output = PropLogicOutput::Literal(e),
+                        Ok(r) => model.output = PropLogicOutput::Literal(r),
+                        Err(e) => model.output = PropLogicOutput::Error(e),
                     }
                 }
-                Err(e) => model.output = PropLogicOutput::Literal(e),
+                Err(e) => model.output = PropLogicOutput::Error(e),
             }
         }
         Msg::ScrollUp => {
@@ -82,7 +82,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::ScrollDown => {
             if let Some(i) = match (&model.output, model.truth_table_state.selected()) {
                 (PropLogicOutput::Table(table), Some(i)) => {
-                    if i >= table.len() - 1 {
+                    if i >= table.rows.len() - 1 {
                         Some(i)
                     } else {
                         Some(i + 1)
