@@ -10,7 +10,8 @@ pub(crate) struct InputState {
 pub(crate) enum PropLogicOutput {
     #[default]
     None,
-    Literal(String),
+    Error(String),
+    Literal(bool),
     Table(theoinf::propositional_logic::TruthTable),
 }
 
