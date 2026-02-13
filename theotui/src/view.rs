@@ -25,9 +25,9 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         .margin(2)
         .constraints(
             [
-                Constraint::Length(2),
-                Constraint::Length(3),  // input
-                Constraint::Length(20), // output
+                Constraint::Length(3),  // formula input
+                Constraint::Length(3),  // classification
+                Constraint::Length(20), // result / truth table
                 Constraint::Min(1),
                 Constraint::Length(1),
             ]
@@ -35,10 +35,11 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         )
         .split(frame.area());
 
-    let formula_rect = chunks[1];
-    let formula_rect = center_horizontal(formula_rect, 100);
-    let _main_rect = chunks[2];
+    let formula_rect = center_horizontal(chunks[0], 100);
+    let classification_rect = center_horizontal(chunks[1], 100);
+    let result_rect = center_horizontal(chunks[2], 100);
 
+    // render formula input
     let formula_input = Input::new(model.formula_input_state.value.clone())
         .with_cursor(model.formula_input_state.cursor);
     let formula_width = formula_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
@@ -46,7 +47,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
     let formula_paragraph = Paragraph::new(formula_input.value())
         .style(default_style)
         .scroll((0, formula_scroll as u16))
-        .block(Block::default().borders(Borders::ALL).title(" Formula "));
+        .block(Block::default().borders(Borders::ALL).title(" Formula φ "));
     frame.render_widget(formula_paragraph, formula_rect);
 
     frame.set_cursor_position((
@@ -58,24 +59,69 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         formula_rect.y + 1,
     ));
 
+    // render eval result
     match &model.output {
         crate::model::PropLogicOutput::None => (),
-        crate::model::PropLogicOutput::Literal(output) => {
-            let output_rect = chunks[2];
-            let output_rect = center_horizontal(output_rect, 100);
-            let output_paragraph = Paragraph::new(output.clone())
+        crate::model::PropLogicOutput::Error(e) => {
+            let result_paragraph = Paragraph::new(e.clone())
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
-            frame.render_widget(output_paragraph, output_rect);
+            frame.render_widget(result_paragraph, result_rect);
         }
-        crate::model::PropLogicOutput::Table(table) if table.is_empty() => {
+        crate::model::PropLogicOutput::Literal(eval_result) => {
+            // render formula classification
+            let classification = if *eval_result {
+                "φ ∈ SAT, ⊢ φ"
+            } else {
+                "φ ∉ SAT, φ ⊢ ⊥"
+            };
+            let classification_paragraph =
+                Paragraph::new(classification).style(default_style).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Classification "),
+                );
+            frame.render_widget(classification_paragraph, classification_rect);
+
+            // render formula result
+            let result_paragraph = Paragraph::new(eval_result.to_string())
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            frame.render_widget(result_paragraph, result_rect);
+        }
+        crate::model::PropLogicOutput::Table(table) if table.rows.is_empty() => {
             panic!("should not happen")
         }
         crate::model::PropLogicOutput::Table(table) => {
-            let keys = theoinf::propositional_logic::formula_vars(&table[0].0);
-            let widths = [Constraint::Length(10)].repeat(keys.len() + 1);
+            // render formula classification
+            let classification = {
+                let mut c = "".to_string();
+                if table.is_sat() {
+                    c.push_str("φ ∈ SAT");
+                    if table.is_tautology() {
+                        c.push_str(", ⊢ φ");
+                    }
+                } else {
+                    c.push_str("φ ∉ SAT");
+                    if table.is_contradiction() {
+                        c.push_str(", φ ⊢ ⊥");
+                    }
+                }
+                c
+            };
+            let classification_paragraph =
+                Paragraph::new(classification).style(default_style).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(" Classification "),
+                );
+            frame.render_widget(classification_paragraph, classification_rect);
+
+            // render truth table
+            let vars = table.vars();
+            let widths = [Constraint::Length(10)].repeat(vars.len() + 1);
             let header = {
-                let mut header_names = keys.clone();
+                let mut header_names = vars.clone();
                 header_names.push("result".to_string());
                 header_names
                     .into_iter()
@@ -85,6 +131,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
                     .height(1)
             };
             let rows: Vec<Row> = table
+                .rows
                 .iter()
                 .enumerate()
                 .map(|(idx, (assignment, result))| {
@@ -93,8 +140,8 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
                         _ => default_style.bg(Color::Indexed(236u8)),
                     };
                     let mut bools = vec![];
-                    keys.iter()
-                        .for_each(|key| bools.push(assignment[key].to_string()));
+                    vars.iter()
+                        .for_each(|var| bools.push(assignment[var].to_string()));
                     bools.push(result.to_string());
                     bools
                         .into_iter()
@@ -108,11 +155,9 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
                 .header(header)
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
-            let table_rect = chunks[2];
-            let table_rect = center_horizontal(table_rect, 100);
-            frame.render_stateful_widget(t, table_rect, &mut model.truth_table_state);
+            frame.render_stateful_widget(t, result_rect, &mut model.truth_table_state);
 
-            render_scrollbar(frame, table_rect, &mut model.truth_table_scroll_state);
+            render_scrollbar(frame, result_rect, &mut model.truth_table_scroll_state);
         }
     };
 }
