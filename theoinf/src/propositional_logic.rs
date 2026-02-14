@@ -180,7 +180,9 @@ impl TruthTable {
         if self.rows.is_empty() {
             vec![]
         } else {
-            self.rows[0].0.keys().map(|s| s.to_string()).collect()
+            let mut keys: Vec<String> = self.rows[0].0.keys().map(|s| s.to_string()).collect();
+            keys.sort();
+            keys
         }
     }
 }
@@ -477,5 +479,9 @@ mod tests {
         assert!(table.is_ok());
         let table = table.unwrap();
         assert_eq!(table.rows.len(), 4);
+        assert!(table.is_sat());
+        assert!(!table.is_tautology());
+        assert!(!table.is_contradiction());
+        assert_eq!(table.vars(), vec!["a", "b"]);
     }
 }

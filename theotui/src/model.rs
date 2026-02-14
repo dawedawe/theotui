@@ -1,4 +1,5 @@
 use ratatui::widgets::{ScrollbarState, TableState};
+use strum::{Display, EnumCount, EnumIter, FromRepr};
 
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct InputState {
@@ -6,8 +7,31 @@ pub(crate) struct InputState {
     pub(crate) cursor: usize,
 }
 
+#[derive(Debug, Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount)]
+pub(crate) enum SelectedTopic {
+    #[default]
+    #[strum(to_string = "Propositional Logic")]
+    PropositionalLogic,
+    #[strum(to_string = "Set Theory")]
+    SetTheory,
+}
+
+impl SelectedTopic {
+    pub(crate) fn previous(self) -> Self {
+        let current_index = self as i32;
+        let previous_index = (current_index - 1).rem_euclid(SelectedTopic::COUNT as i32);
+        Self::from_repr(previous_index as usize).unwrap_or(self)
+    }
+
+    pub(crate) fn next(self) -> Self {
+        let current_index = self as i32;
+        let previous_index = (current_index + 1).rem_euclid(SelectedTopic::COUNT as i32);
+        Self::from_repr(previous_index as usize).unwrap_or(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
-pub(crate) enum PropLogicOutput {
+pub(crate) enum PropLogicResult {
     #[default]
     None,
     Error(String),
@@ -15,23 +39,27 @@ pub(crate) enum PropLogicOutput {
     Table(theoinf::propositional_logic::TruthTable),
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct PropositionalLogicModel {
+    pub(crate) formula_input_state: InputState,
+    pub(crate) result: PropLogicResult,
+    pub(crate) truth_table_state: TableState,
+    pub(crate) truth_table_scroll_state: ScrollbarState,
+}
+
 #[derive(Debug)]
 pub(crate) struct Model {
     pub(crate) running: bool,
-    pub(crate) formula_input_state: InputState,
-    pub(crate) output: PropLogicOutput,
-    pub(crate) truth_table_state: TableState,
-    pub(crate) truth_table_scroll_state: ScrollbarState,
+    pub(crate) selected_topic: SelectedTopic,
+    pub(crate) proplogic_state: PropositionalLogicModel,
 }
 
 impl Default for Model {
     fn default() -> Self {
         Self {
             running: true,
-            formula_input_state: Default::default(),
-            output: Default::default(),
-            truth_table_state: TableState::default(),
-            truth_table_scroll_state: ScrollbarState::default(),
+            selected_topic: SelectedTopic::default(),
+            proplogic_state: Default::default(),
         }
     }
 }
