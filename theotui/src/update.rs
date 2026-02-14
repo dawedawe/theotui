@@ -1,4 +1,4 @@
-use crate::model::{Model, PropLogicOutput};
+use crate::model::{Model, PropLogicResult, SelectedTopic};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
     widgets::ScrollbarState,
@@ -7,11 +7,17 @@ use std::collections::HashMap;
 use theoinf::propositional_logic::{Assignment, run};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
-pub(crate) enum Msg {
-    Exit,
+pub(crate) enum PropLogicMsg {
     Eval,
     ScrollUp,
     ScrollDown,
+}
+
+pub(crate) enum Msg {
+    Exit,
+    NextTab,
+    PrevTab,
+    PropLogicMsg(PropLogicMsg),
 }
 
 pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>> {
@@ -23,19 +29,28 @@ pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>>
 }
 
 fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
-    match key.code {
-        KeyCode::Esc => Some(Msg::Exit),
-        KeyCode::Enter => Some(Msg::Eval),
-        KeyCode::Up => Some(Msg::ScrollUp),
-        KeyCode::Down => Some(Msg::ScrollDown),
-        _ => {
-            let mut input = Input::new(model.formula_input_state.value.clone())
-                .with_cursor(model.formula_input_state.cursor);
+    match (model.selected_topic, key.code) {
+        (_, KeyCode::Esc) => Some(Msg::Exit),
+        (SelectedTopic::PropositionalLogic, KeyCode::Enter) => {
+            Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
+        }
+        (SelectedTopic::PropositionalLogic, KeyCode::Up) => {
+            Some(Msg::PropLogicMsg(PropLogicMsg::ScrollUp))
+        }
+        (SelectedTopic::PropositionalLogic, KeyCode::Down) => {
+            Some(Msg::PropLogicMsg(PropLogicMsg::ScrollDown))
+        }
+        (_, KeyCode::Tab) => Some(Msg::NextTab),
+        (_, KeyCode::BackTab) => Some(Msg::PrevTab),
+        (SelectedTopic::PropositionalLogic, _) => {
+            let mut input = Input::new(model.proplogic_state.formula_input_state.value.clone())
+                .with_cursor(model.proplogic_state.formula_input_state.cursor);
             input.handle_event(&Event::Key(key));
-            model.formula_input_state.cursor = input.cursor();
-            model.formula_input_state.value = input.value().into();
+            model.proplogic_state.formula_input_state.cursor = input.cursor();
+            model.proplogic_state.formula_input_state.value = input.value().into();
             None
         }
+        _ => todo!(),
     }
 }
 
@@ -44,29 +59,37 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::Exit => {
             model.running = false;
         }
-        Msg::Eval => {
-            let table =
-                theoinf::propositional_logic::truth_table(model.formula_input_state.value.as_str());
+        Msg::PropLogicMsg(PropLogicMsg::Eval) => {
+            let table = theoinf::propositional_logic::truth_table(
+                model.proplogic_state.formula_input_state.value.as_str(),
+            );
             match table {
                 Ok(table) if !table.rows.is_empty() => {
-                    model.truth_table_state.select(Some(0));
-                    model.truth_table_scroll_state = ScrollbarState::new(table.rows.len());
-                    model.output = PropLogicOutput::Table(table);
+                    model.proplogic_state.truth_table_state.select(Some(0));
+                    model.proplogic_state.truth_table_scroll_state =
+                        ScrollbarState::new(table.rows.len());
+                    model.proplogic_state.result = PropLogicResult::Table(table);
                 }
                 Ok(_) => {
                     let assignment: Assignment = HashMap::new();
-                    let r = run(model.formula_input_state.value.as_str(), &assignment);
+                    let r = run(
+                        model.proplogic_state.formula_input_state.value.as_str(),
+                        &assignment,
+                    );
                     match r {
-                        Ok(r) => model.output = PropLogicOutput::Literal(r),
-                        Err(e) => model.output = PropLogicOutput::Error(e),
+                        Ok(r) => model.proplogic_state.result = PropLogicResult::Literal(r),
+                        Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
                     }
                 }
-                Err(e) => model.output = PropLogicOutput::Error(e),
+                Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
             }
         }
-        Msg::ScrollUp => {
-            if let Some(i) = match (&model.output, model.truth_table_state.selected()) {
-                (PropLogicOutput::Table(_), Some(i)) => {
+        Msg::PropLogicMsg(PropLogicMsg::ScrollUp) => {
+            if let Some(i) = match (
+                &model.proplogic_state.result,
+                model.proplogic_state.truth_table_state.selected(),
+            ) {
+                (PropLogicResult::Table(_), Some(i)) => {
                     if i == 0 {
                         Some(i)
                     } else {
@@ -75,13 +98,17 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 }
                 _ => None,
             } {
-                model.truth_table_state.select(Some(i));
-                model.truth_table_scroll_state = model.truth_table_scroll_state.position(i);
+                model.proplogic_state.truth_table_state.select(Some(i));
+                model.proplogic_state.truth_table_scroll_state =
+                    model.proplogic_state.truth_table_scroll_state.position(i);
             };
         }
-        Msg::ScrollDown => {
-            if let Some(i) = match (&model.output, model.truth_table_state.selected()) {
-                (PropLogicOutput::Table(table), Some(i)) => {
+        Msg::PropLogicMsg(PropLogicMsg::ScrollDown) => {
+            if let Some(i) = match (
+                &model.proplogic_state.result,
+                model.proplogic_state.truth_table_state.selected(),
+            ) {
+                (PropLogicResult::Table(table), Some(i)) => {
                     if i >= table.rows.len() - 1 {
                         Some(i)
                     } else {
@@ -90,9 +117,12 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 }
                 _ => None,
             } {
-                model.truth_table_state.select(Some(i));
-                model.truth_table_scroll_state = model.truth_table_scroll_state.position(i);
+                model.proplogic_state.truth_table_state.select(Some(i));
+                model.proplogic_state.truth_table_scroll_state =
+                    model.proplogic_state.truth_table_scroll_state.position(i);
             }
         }
+        Msg::NextTab => model.selected_topic = model.selected_topic.next(),
+        Msg::PrevTab => model.selected_topic = model.selected_topic.previous(),
     }
 }
