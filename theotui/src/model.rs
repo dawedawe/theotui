@@ -47,11 +47,26 @@ pub(crate) struct PropositionalLogicModel {
     pub(crate) truth_table_scroll_state: ScrollbarState,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum SetTheoryResult {
+    #[default]
+    None,
+    Error(String),
+    Expr(theoinf::set_theory::Expr),
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct SetTheoryModel {
+    pub(crate) formula_input_state: InputState,
+    pub(crate) result: SetTheoryResult,
+}
+
 #[derive(Debug)]
 pub(crate) struct Model {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) proplogic_state: PropositionalLogicModel,
+    pub(crate) settheory_state: SetTheoryModel,
 }
 
 impl Default for Model {
@@ -60,6 +75,7 @@ impl Default for Model {
             running: true,
             selected_topic: SelectedTopic::default(),
             proplogic_state: Default::default(),
+            settheory_state: Default::default(),
         }
     }
 }
