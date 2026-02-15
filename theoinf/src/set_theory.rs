@@ -42,13 +42,21 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     alt ((
                         dispatch! {peek(any);
                             '(' => delimited('(',  parser(0).map(|e| Expr::Paren(Box::new(e))), cut_err(')')),
-                            '{' => delimited('{',  comma_list.map(|s|{
-                                    let v = s.iter().map(|x|x.to_string()).collect();
-                                    Expr::SetLiteral(v)
-                            })   , cut_err('}')),
+                            '{' => alt((
+                                 delimited(
+                                    '{',
+                                    comma_list.map(|s|{
+                                        let v = s.iter().map(|x|x.to_string()).collect();
+                                        Expr::SetLiteral(v)
+                                    }),
+                                    cut_err('}')),
+                                delimited(
+                                    '{',
+                                    multispace0.map(|_| Expr::SetLiteral(vec![])),
+                                    cut_err('}')),
+                            )),
                             _ => identifier.map(|s| Expr::Var(s.into())),
                         },
-                        // "{}".value(Expr::SetLiteral(vec![])),
                     )),
                     multispace0,
                 )
@@ -67,8 +75,8 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             .infix(
                 alt((
                     dispatch! {any;
-                        'u' => Left(4, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
-                        'n' => Left(3, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
+                        'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
+                        'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -94,7 +102,7 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
 
 fn comma_list<'i>(i: &mut &'i str) -> ModalResult<Vec<&'i str>> {
     let ident_with_space = delimited(multispace0, identifier, multispace0);
-    separated(0.., ident_with_space, ",").parse_next(i)
+    separated(1.., ident_with_space, ",").parse_next(i)
 }
 
 pub fn eval(expr: &Expr) -> Expr {
@@ -236,7 +244,6 @@ mod tests {
     fn eval_of_an_intersection_works() {
         let r = run("{ a,c } n {a,b,c}");
         assert!(r.is_ok());
-
         assert_eq!(Expr::SetLiteral(vec!["a".into(), "c".into()]), r.unwrap());
     }
 
@@ -244,7 +251,6 @@ mod tests {
     fn eval_of_an_intersection_with_an_empty_set_works() {
         let r = run("{ a,c } n {}");
         assert!(r.is_ok());
-
         assert_eq!(Expr::SetLiteral(vec![]), r.unwrap());
     }
 
@@ -252,7 +258,6 @@ mod tests {
     fn eval_of_an_union_works() {
         let r = run("{ a,c } u {b,c}");
         assert!(r.is_ok());
-
         assert_eq!(
             Expr::SetLiteral(vec!["a".into(), "b".into(), "c".into()]),
             r.unwrap()
@@ -261,9 +266,22 @@ mod tests {
 
     #[test]
     fn eval_of_an_union_with_an_empty_set_works() {
-        let r = run("({} u ({b,c}))");
+        let r = run("({   } u ({b,c}))");
         assert!(r.is_ok());
-
         assert_eq!(Expr::SetLiteral(vec!["b".into(), "c".into()]), r.unwrap());
+    }
+
+    #[test]
+    fn precedence_works() {
+        let r = run("{a} u {b} n {c}");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(vec!["a".into()]), r.unwrap());
+    }
+
+    #[test]
+    fn parentheses_works() {
+        let r = run("({a} u {b}) n {c}");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(vec![]), r.unwrap());
     }
 }
