@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use std::ops::Deref;
 
 use winnow::ModalResult;
@@ -32,9 +33,23 @@ pub enum Expr {
     Paren(Box<Expr>),
 }
 
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Var(v) => write!(f, "{v}"),
+            Expr::SetLiteral(items) => write!(f, "{{{}}}", items.join(", ")),
+            Expr::SetDecl(_, _expr) => todo!(),
+            Expr::Not(_expr) => todo!(),
+            Expr::Intersection(expr1, expr2) => write!(f, "{} n {}", expr1, expr2),
+            Expr::Union(expr1, expr2) => write!(f, "{} u {}", expr1, expr2),
+            Expr::Paren(expr) => write!(f, "({})", expr),
+        }
+    }
+}
+
 pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
-        move |i: &mut &str| {
+        move |i: &mut &str| -> Result<Expr, ErrMode<ContextError>> {
             use Infix::Left;
             expression(
                 delimited(
@@ -46,7 +61,9 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                  delimited(
                                     '{',
                                     comma_list.map(|s|{
-                                        let v = s.iter().map(|x|x.to_string()).collect();
+                                        let mut v: Vec<String> = s.iter().map(|x|x.to_string()).collect();
+                                        v.sort();
+                                        v.dedup();
                                         Expr::SetLiteral(v)
                                     }),
                                     cut_err('}')),
@@ -283,5 +300,12 @@ mod tests {
         let r = run("({a} u {b}) n {c}");
         assert!(r.is_ok());
         assert_eq!(Expr::SetLiteral(vec![]), r.unwrap());
+    }
+
+    #[test]
+    fn dedup_works() {
+        let r = run("{a,b,a,b}");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(vec!["a".into(), "b".into()]), r.unwrap());
     }
 }
