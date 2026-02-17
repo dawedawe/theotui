@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::ops::Deref;
 
 use winnow::ModalResult;
 use winnow::Parser;
@@ -25,7 +24,7 @@ use winnow::token::take_while;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
     Var(String),
-    SetLiteral(Vec<String>),
+    SetLiteral(HashSet<String>),
     SetDecl(String, Box<Expr>),
     Not(Box<Expr>),
     Intersection(Box<Expr>, Box<Expr>),
@@ -37,7 +36,11 @@ impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Var(v) => write!(f, "{v}"),
-            Expr::SetLiteral(items) => write!(f, "{{{}}}", items.join(", ")),
+            Expr::SetLiteral(items) => {
+                let mut items: Vec<String> = items.iter().cloned().collect();
+                items.sort();
+                write!(f, "{{{}}}", items.join(", "))
+            }
             Expr::SetDecl(_, _expr) => todo!(),
             Expr::Not(_expr) => todo!(),
             Expr::Intersection(expr1, expr2) => write!(f, "{} n {}", expr1, expr2),
@@ -61,15 +64,13 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                  delimited(
                                     '{',
                                     comma_list.map(|s|{
-                                        let mut v: Vec<String> = s.iter().map(|x|x.to_string()).collect();
-                                        v.sort();
-                                        v.dedup();
-                                        Expr::SetLiteral(v)
+                                        let set: HashSet<String> = s.iter().map(|x|x.to_string()).collect();
+                                        Expr::SetLiteral(set)
                                     }),
                                     cut_err('}')),
                                 delimited(
                                     '{',
-                                    multispace0.map(|_| Expr::SetLiteral(vec![])),
+                                    multispace0.map(|_| Expr::SetLiteral(HashSet::new())),
                                     cut_err('}')),
                             )),
                             _ => identifier.map(|s| Expr::Var(s.into())),
@@ -133,11 +134,8 @@ pub fn eval(expr: &Expr) -> Expr {
             let expr1 = eval(expr1);
             let expr2 = eval(expr2);
             match (expr1, expr2) {
-                (Expr::SetLiteral(items1), Expr::SetLiteral(items2)) => {
-                    let set1: HashSet<String> = items1.deref().iter().cloned().collect();
-                    let set2: HashSet<String> = items2.deref().iter().cloned().collect();
-                    let mut inter: Vec<String> = set1.intersection(&set2).cloned().collect();
-                    inter.sort();
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let inter: HashSet<String> = set1.intersection(&set2).cloned().collect();
                     Expr::SetLiteral(inter)
                 }
                 _ => todo!(),
@@ -147,11 +145,8 @@ pub fn eval(expr: &Expr) -> Expr {
             let expr1 = eval(expr1);
             let expr2 = eval(expr2);
             match (expr1, expr2) {
-                (Expr::SetLiteral(items1), Expr::SetLiteral(items2)) => {
-                    let set1: HashSet<String> = items1.deref().iter().cloned().collect();
-                    let set2: HashSet<String> = items2.deref().iter().cloned().collect();
-                    let mut union: Vec<String> = set1.union(&set2).cloned().collect();
-                    union.sort();
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let union: HashSet<String> = set1.union(&set2).cloned().collect();
                     Expr::SetLiteral(union)
                 }
                 _ => todo!(),
@@ -186,7 +181,7 @@ mod tests {
         let mut input = "{}";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        assert_eq!(Expr::SetLiteral(vec![]), expr.unwrap());
+        assert_eq!(Expr::SetLiteral([].into()), expr.unwrap());
         assert_eq!("", input);
     }
 
@@ -195,7 +190,7 @@ mod tests {
         let mut input = "{a}";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        assert_eq!(Expr::SetLiteral(vec!["a".into()]), expr.unwrap());
+        assert_eq!(Expr::SetLiteral(["a".into()].into()), expr.unwrap());
         assert_eq!("", input);
     }
 
@@ -205,7 +200,7 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::SetLiteral(vec!["a".into(), "b".into()]),
+            Expr::SetLiteral(["a".into(), "b".into()].into()),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -217,7 +212,7 @@ mod tests {
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::SetLiteral(vec!["a".into(), "b".into(), "c".into()]),
+            Expr::SetLiteral(["a".into(), "b".into(), "c".into()].into()),
             expr.unwrap()
         );
         assert_eq!("", input);
@@ -228,8 +223,8 @@ mod tests {
         let mut input = "{ a , b,c} u {d,e}";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        let s0 = Expr::SetLiteral(vec!["a".into(), "b".into(), "c".into()]);
-        let s1 = Expr::SetLiteral(vec!["d".into(), "e".into()]);
+        let s0 = Expr::SetLiteral(["a".into(), "b".into(), "c".into()].into());
+        let s1 = Expr::SetLiteral(["d".into(), "e".into()].into());
         assert_eq!(Expr::Union(Box::new(s0), Box::new(s1)), expr.unwrap());
         assert_eq!("", input);
     }
@@ -239,8 +234,8 @@ mod tests {
         let mut input = "{ a } n {}";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        let s0 = Expr::SetLiteral(vec!["a".into()]);
-        let s1 = Expr::SetLiteral(vec![]);
+        let s0 = Expr::SetLiteral(["a".into()].into());
+        let s1 = Expr::SetLiteral([].into());
         assert_eq!(
             Expr::Intersection(Box::new(s0), Box::new(s1)),
             expr.unwrap()
@@ -261,14 +256,17 @@ mod tests {
     fn eval_of_an_intersection_works() {
         let r = run("{ a,c } n {a,b,c}");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec!["a".into(), "c".into()]), r.unwrap());
+        assert_eq!(
+            Expr::SetLiteral(["a".into(), "c".into()].into()),
+            r.unwrap()
+        );
     }
 
     #[test]
     fn eval_of_an_intersection_with_an_empty_set_works() {
         let r = run("{ a,c } n {}");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec![]), r.unwrap());
+        assert_eq!(Expr::SetLiteral([].into()), r.unwrap());
     }
 
     #[test]
@@ -276,7 +274,7 @@ mod tests {
         let r = run("{ a,c } u {b,c}");
         assert!(r.is_ok());
         assert_eq!(
-            Expr::SetLiteral(vec!["a".into(), "b".into(), "c".into()]),
+            Expr::SetLiteral(["a".into(), "b".into(), "c".into()].into()),
             r.unwrap()
         );
     }
@@ -285,27 +283,33 @@ mod tests {
     fn eval_of_an_union_with_an_empty_set_works() {
         let r = run("({   } u ({b,c}))");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec!["b".into(), "c".into()]), r.unwrap());
+        assert_eq!(
+            Expr::SetLiteral(["b".into(), "c".into()].into()),
+            r.unwrap()
+        );
     }
 
     #[test]
     fn precedence_works() {
         let r = run("{a} u {b} n {c}");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec!["a".into()]), r.unwrap());
+        assert_eq!(Expr::SetLiteral(["a".into()].into()), r.unwrap());
     }
 
     #[test]
     fn parentheses_works() {
         let r = run("({a} u {b}) n {c}");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec![]), r.unwrap());
+        assert_eq!(Expr::SetLiteral([].into()), r.unwrap());
     }
 
     #[test]
     fn dedup_works() {
         let r = run("{a,b,a,b}");
         assert!(r.is_ok());
-        assert_eq!(Expr::SetLiteral(vec!["a".into(), "b".into()]), r.unwrap());
+        assert_eq!(
+            Expr::SetLiteral(["a".into(), "b".into()].into()),
+            r.unwrap()
+        );
     }
 }
