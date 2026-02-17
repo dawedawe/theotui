@@ -68,10 +68,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                         Expr::SetLiteral(set)
                                     }),
                                     cut_err('}')),
-                                delimited(
-                                    '{',
-                                    multispace0.map(|_| Expr::SetLiteral(HashSet::new())),
-                                    cut_err('}')),
+                                empty_set.map(|_|Expr::SetLiteral([].into())),
                             )),
                             _ => identifier.map(|s| Expr::Var(s.into())),
                         },
@@ -106,6 +103,16 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     parser(0).parse_next(i)
 }
 
+fn empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    delimited(
+        '{',
+        multispace0.map(|_| Expr::SetLiteral(HashSet::new())),
+        cut_err('}'),
+    )
+    .take()
+    .parse_next(i)
+}
+
 fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     trace(
         "identifier",
@@ -118,8 +125,21 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     .parse_next(i)
 }
 
+fn set_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+        let element = (
+            one_of(|c: char| c.is_alphanum()),
+            take_while(0.., |c: char| c.is_alphanum() || c == '_'),
+        );
+        trace("set_element", element).take().parse_next(i)
+    }
+
+    let element = alt((char_or_num_element, empty_set));
+    trace("set_element", element).take().parse_next(i)
+}
+
 fn comma_list<'i>(i: &mut &'i str) -> ModalResult<Vec<&'i str>> {
-    let ident_with_space = delimited(multispace0, identifier, multispace0);
+    let ident_with_space = delimited(multispace0, set_element, multispace0);
     separated(1.., ident_with_space, ",").parse_next(i)
 }
 
@@ -208,11 +228,11 @@ mod tests {
 
     #[test]
     fn parsing_a_three_element_set_literal_works() {
-        let mut input = "{a,b,c}";
+        let mut input = "{a,2,{}}";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
-            Expr::SetLiteral(["a".into(), "b".into(), "c".into()].into()),
+            Expr::SetLiteral(["a".into(), "2".into(), "{}".into()].into()),
             expr.unwrap()
         );
         assert_eq!("", input);
