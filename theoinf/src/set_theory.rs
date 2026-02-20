@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::panic::panic_any;
+use std::ops::Deref;
 
 use winnow::ModalResult;
 use winnow::Parser;
@@ -11,8 +11,8 @@ use winnow::combinator::delimited;
 use winnow::combinator::dispatch;
 use winnow::combinator::expression;
 use winnow::combinator::fail;
+use winnow::combinator::opt;
 use winnow::combinator::peek;
-use winnow::combinator::separated;
 use winnow::combinator::trace;
 use winnow::combinator::{Infix, Prefix};
 use winnow::error::ContextError;
@@ -30,51 +30,21 @@ pub enum SetElement {
 
 impl From<&str> for SetElement {
     fn from(value: &str) -> Self {
-        let value = value.replace(" ", "");
-        if value.trim() == "" {
-            panic!("empty string given to SetElement::From")
-        }
-
-        if value == "{}" {
-            return SetElement::Set(HashSet::new());
-        }
-
-        // element is {} or {...} or {{..}} or {{}, a}
-        if value.starts_with('{') && value.ends_with('}') {
-            let inner = value[1..value.len() - 1].trim();
-
-            let inbalanced = {
-                let open = inner.find('{');
-                let close = inner.find('}');
-                if let (Some(o), Some(c)) = (open, close) {
-                    o > c
-                } else {
-                    false
-                }
-            };
-
-            if inbalanced {
-                let elems: Vec<&str> = value.split_terminator(&[','][..]).collect();
-                let hash_set: HashSet<SetElement> =
-                    elems.into_iter().map(|e| e.trim().into()).collect();
-                SetElement::Set(hash_set)
-            } else if inner.starts_with('{') && inner.ends_with('}') {
-                let element: SetElement = inner.into();
-                let mut set: HashSet<SetElement> = HashSet::new();
-                set.insert(element);
-                SetElement::Set(set)
-            } else {
-                let elems: Vec<&str> = inner.split_terminator(&[','][..]).collect();
-                let hash_set: HashSet<SetElement> =
-                    elems.into_iter().map(|e| e.trim().into()).collect();
-                SetElement::Set(hash_set)
-            }
-        } else {
-            if value.contains('{') || value.contains('}') {
-                let s = format!("inner set missed by parser '{}'", value);
-                panic_any(s)
-            }
-            SetElement::Elem(value.to_string())
+        let value = value.to_string();
+        let parse_result = pratt_parser(&mut value.as_str());
+        match parse_result {
+            Ok(expr) => match expr {
+                Expr::Var(_) => todo!(),
+                Expr::Element(s) => SetElement::Elem(s),
+                Expr::Comma(_expr1, _expr2) => todo!(),
+                Expr::SetLiteral(hash_set) => SetElement::Set(hash_set),
+                Expr::SetDecl(_, _expr) => todo!(),
+                Expr::Not(_expr) => todo!(),
+                Expr::Intersection(_expr, _expr1) => todo!(),
+                Expr::Union(_expr1, _expr2) => todo!(),
+                Expr::Paren(_expr) => todo!(),
+            },
+            Err(_) => panic!("can't construct SetElement from given value"),
         }
     }
 }
@@ -101,6 +71,8 @@ impl Display for SetElement {
 #[derive(PartialEq, Debug, Clone, Eq)]
 pub enum Expr {
     Var(String),
+    Element(String),
+    Comma(Box<Expr>, Box<Expr>),
     SetLiteral(HashSet<SetElement>),
     SetDecl(String, Box<Expr>),
     Not(Box<Expr>),
@@ -123,7 +95,82 @@ impl Display for Expr {
             Expr::Intersection(expr1, expr2) => write!(f, "{} n {}", expr1, expr2),
             Expr::Union(expr1, expr2) => write!(f, "{} u {}", expr1, expr2),
             Expr::Paren(expr) => write!(f, "({})", expr),
+            Expr::Element(set_element) => write!(f, "{}", set_element),
+            Expr::Comma(expr1, expr2) => write!(f, "{}, {}", expr1, expr2),
         }
+    }
+}
+
+fn traverse_comma(expr: &Expr) -> SetElement {
+    match expr {
+        Expr::Element(x) => SetElement::Elem(x.to_string()),
+        Expr::Comma(expr1, expr2) => {
+            let expr1 = expr1.deref();
+            let expr2 = expr2.deref();
+            match (expr1, expr2) {
+                (Expr::Element(x), Expr::Element(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e1 = SetElement::Elem(x.to_string());
+                    let e2 = SetElement::Elem(y.to_string());
+                    hash_set.insert(e1);
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                (Expr::Element(x), Expr::SetLiteral(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e1 = SetElement::Elem(x.to_string());
+                    hash_set.insert(e1);
+                    let e2 = SetElement::Set(y.clone());
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                (Expr::SetLiteral(x), Expr::Element(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e1 = SetElement::Set(x.clone());
+                    hash_set.insert(e1);
+                    let e2 = SetElement::Elem(y.to_string());
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                (Expr::SetLiteral(x), Expr::SetLiteral(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e1 = SetElement::Set(x.clone());
+                    hash_set.insert(e1);
+                    let e2 = SetElement::Set(y.clone());
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                (Expr::Comma(_, _), Expr::Element(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e2 = SetElement::Elem(y.to_string());
+                    let e1 = traverse_comma(expr1);
+                    match e1 {
+                        SetElement::Set(s) => s.into_iter().for_each(|e| {
+                            hash_set.insert(e);
+                        }),
+                        _ => todo!(),
+                    };
+
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                (Expr::Comma(_, _), Expr::SetLiteral(y)) => {
+                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                    let e1 = traverse_comma(expr1);
+                    match e1 {
+                        SetElement::Set(s) => s.into_iter().for_each(|e| {
+                            hash_set.insert(e);
+                        }),
+                        _ => todo!(),
+                    };
+                    let e2 = SetElement::Set(y.clone());
+                    hash_set.insert(e2);
+                    SetElement::Set(hash_set)
+                }
+                _ => todo!(),
+            }
+        }
+        _ => todo!(),
     }
 }
 
@@ -137,18 +184,40 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     alt ((
                         dispatch! {peek(any);
                             '(' => delimited('(',  parser(0).map(|e| Expr::Paren(Box::new(e))), cut_err(')')),
-                            '{' => alt((
-                                 delimited(
-                                    '{',
-                                    comma_list.map(|s|{
-                                        let set: Vec<String> = s.iter().map(|x|x.to_string()).collect();
-                                        let elems: HashSet<SetElement> = set.iter().map(|e|SetElement::from(e.as_str())).collect();
-                                        Expr::SetLiteral(elems)
-                                    }),
-                                    cut_err('}')),
-                                empty_set.map(|_|Expr::SetLiteral([].into())),
-                            )),
-                            _ => identifier.map(|s| Expr::Var(s.into())),
+                            '{' => delimited('{',  opt(parser(0)).map(|e|
+                                {
+                                    let mut hash_set: HashSet<SetElement> = HashSet::new();
+                                    if let Some(e) = e {
+                                            match &e {
+                                                Expr::Var(x) => {
+                                                    let e = SetElement::Elem(x.to_string());
+                                                    hash_set.insert(e);
+                                                },
+                                                Expr::Comma(_expr1, _expr2) => {
+                                                    let e = traverse_comma(&e);
+                                                    if let SetElement::Set(x) = e {
+                                                        x.into_iter().for_each(|xx|{hash_set.insert(xx);});
+                                                    };
+                                                },
+                                                Expr::Element(set_element) => {
+                                                    let e = SetElement::Elem(set_element.to_string());
+                                                    hash_set.insert(e);
+                                                },
+                                                Expr::SetLiteral(s) => {
+                                                    let e = SetElement::Set(s.clone());
+                                                    hash_set.insert(e);
+                                                },
+                                                Expr::SetDecl(_, _expr) => todo!(),
+                                                Expr::Not(_expr) => todo!(),
+                                                Expr::Intersection(_expr, _expr1) => todo!(),
+                                                Expr::Union(_expr, _expr1) => todo!(),
+                                                Expr::Paren(_expr) => todo!(),
+                                            };
+                                    }
+                                    Expr::SetLiteral(hash_set)
+                                }
+                                ), cut_err('}')),
+                            _ => char_or_num_element.map(|s| Expr::Element(s.to_string())),
                         },
                     )),
                     multispace0,
@@ -170,6 +239,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     dispatch! {any;
                         'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
                         'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
+                        ',' => Left(0, |_: &mut _, a, b| Ok(Expr::Comma(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -181,67 +251,17 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     parser(0).parse_next(i)
 }
 
-// {a,b,c}
-fn non_empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    delimited(
-        '{',
-        comma_list.map(|s| {
-            let set: Vec<String> = s.iter().map(|x| x.to_string()).collect();
-            let elems: HashSet<SetElement> =
-                set.iter().map(|e| SetElement::from(e.as_str())).collect();
-            Expr::SetLiteral(elems)
-        }),
-        cut_err('}'),
-    )
-    .take()
-    .parse_next(i)
-}
-
-// {}
-fn empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    delimited(
-        '{',
-        multispace0.map(|_| Expr::SetLiteral(HashSet::new())),
-        cut_err('}'),
-    )
-    .take()
-    .parse_next(i)
-}
-
-// abc123
-fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    trace(
-        "identifier",
-        (
-            one_of(|c: char| c.is_alpha() || c == '_'),
-            take_while(0.., |c: char| c.is_alphanum() || c == '_'),
-        ),
-    )
-    .take()
-    .parse_next(i)
-}
-
-// abc or {}
-fn set_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-        let element = (
-            one_of(|c: char| c.is_alphanum()),
-            take_while(0.., |c: char| c.is_alphanum() || c == '_'),
-        );
-        trace("set_element", element).take().parse_next(i)
-    }
-
-    let element = alt((char_or_num_element, non_empty_set, empty_set));
-    trace("set_element", element).take().parse_next(i)
-}
-
-fn comma_list<'i>(i: &mut &'i str) -> ModalResult<Vec<&'i str>> {
-    let ident_with_space = delimited(multispace0, set_element, multispace0);
-    separated(1.., ident_with_space, ",").parse_next(i)
+fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    let element = (
+        one_of(|c: char| c.is_alphanum()),
+        take_while(0.., |c: char| c.is_alphanum() || c == '_'),
+    );
+    trace("char_or_num_element", element).take().parse_next(i)
 }
 
 pub fn eval(expr: &Expr) -> Expr {
     match expr {
+        Expr::Element(_) => expr.clone(),
         Expr::Var(_) => expr.clone(),
         Expr::Paren(a) => eval(a),
         Expr::SetLiteral(_items) => expr.clone(),
@@ -269,6 +289,7 @@ pub fn eval(expr: &Expr) -> Expr {
                 _ => todo!(),
             }
         }
+        Expr::Comma(_, _) => expr.clone(),
     }
 }
 
@@ -289,7 +310,7 @@ mod tests {
         let mut input = "a";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        assert_eq!(Expr::Var("a".into()), expr.unwrap());
+        assert_eq!(Expr::Element("a".into()), expr.unwrap());
         assert_eq!("", input);
     }
 
@@ -361,15 +382,6 @@ mod tests {
     }
 
     #[test]
-    fn parsing_a_comma_list_works() {
-        let mut input = "a,b, c";
-        let expr = comma_list(&mut input);
-        assert!(expr.is_ok());
-        assert_eq!(vec!["a", "b", "c"], expr.unwrap());
-        assert_eq!("", input);
-    }
-
-    #[test]
     fn eval_of_an_intersection_works() {
         let r = run("{ a,c } n {a,b,c}");
         assert!(r.is_ok());
@@ -398,7 +410,7 @@ mod tests {
 
     #[test]
     fn eval_of_an_union_with_an_empty_set_works() {
-        let r = run("({   } u ({b,c}))");
+        let r = run("({} u ({b,c}))");
         assert!(r.is_ok());
         assert_eq!(
             Expr::SetLiteral(["b".into(), "c".into()].into()),
@@ -458,5 +470,29 @@ mod tests {
             }
             _ => panic!("expected something else"),
         }
+    }
+
+    #[test]
+    fn parsing_nested_empty_works() {
+        let s = pratt_parser(&mut "{ {} }");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        let mut hash_set = HashSet::new();
+        hash_set.insert(SetElement::Set(HashSet::new()));
+        let nested_empty = Expr::SetLiteral(hash_set);
+        assert_eq!(s, nested_empty)
+    }
+
+    #[test]
+    fn parsing_double_nested_empty_works() {
+        let s = pratt_parser(&mut "{ { {} } }");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        let mut hash_set1 = HashSet::new();
+        let mut hash_set2 = HashSet::new();
+        hash_set1.insert(SetElement::Set(HashSet::new()));
+        hash_set2.insert(SetElement::Set(hash_set1));
+        let nested_empty = Expr::SetLiteral(hash_set2);
+        assert_eq!(s, nested_empty)
     }
 }
