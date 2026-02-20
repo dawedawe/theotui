@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::panic::panic_any;
 
 use winnow::ModalResult;
 use winnow::Parser;
@@ -21,10 +22,86 @@ use winnow::token::any;
 use winnow::token::one_of;
 use winnow::token::take_while;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub enum SetElement {
+    Elem(String),
+    Set(HashSet<SetElement>),
+}
+
+impl From<&str> for SetElement {
+    fn from(value: &str) -> Self {
+        let value = value.replace(" ", "");
+        if value.trim() == "" {
+            panic!("empty string given to SetElement::From")
+        }
+
+        if value == "{}" {
+            return SetElement::Set(HashSet::new());
+        }
+
+        // element is {} or {...} or {{..}} or {{}, a}
+        if value.starts_with('{') && value.ends_with('}') {
+            let inner = value[1..value.len() - 1].trim();
+
+            let inbalanced = {
+                let open = inner.find('{');
+                let close = inner.find('}');
+                if let (Some(o), Some(c)) = (open, close) {
+                    o > c
+                } else {
+                    false
+                }
+            };
+
+            if inbalanced {
+                let elems: Vec<&str> = value.split_terminator(&[','][..]).collect();
+                let hash_set: HashSet<SetElement> =
+                    elems.into_iter().map(|e| e.trim().into()).collect();
+                SetElement::Set(hash_set)
+            } else if inner.starts_with('{') && inner.ends_with('}') {
+                let element: SetElement = inner.into();
+                let mut set: HashSet<SetElement> = HashSet::new();
+                set.insert(element);
+                SetElement::Set(set)
+            } else {
+                let elems: Vec<&str> = inner.split_terminator(&[','][..]).collect();
+                let hash_set: HashSet<SetElement> =
+                    elems.into_iter().map(|e| e.trim().into()).collect();
+                SetElement::Set(hash_set)
+            }
+        } else {
+            if value.contains('{') || value.contains('}') {
+                let s = format!("inner set missed by parser '{}'", value);
+                panic_any(s)
+            }
+            SetElement::Elem(value.to_string())
+        }
+    }
+}
+
+impl std::hash::Hash for SetElement {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+    }
+}
+
+impl Display for SetElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SetElement::Elem(e) => write!(f, "{}", e),
+            SetElement::Set(hash_set) => {
+                let elems: Vec<SetElement> = hash_set.iter().cloned().collect();
+                let items: Vec<String> = elems.iter().map(|e| e.to_string()).collect();
+                write!(f, "{{{}}}", items.join(", "))
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Eq)]
 pub enum Expr {
     Var(String),
-    SetLiteral(HashSet<String>),
+    SetLiteral(HashSet<SetElement>),
     SetDecl(String, Box<Expr>),
     Not(Box<Expr>),
     Intersection(Box<Expr>, Box<Expr>),
@@ -37,7 +114,7 @@ impl Display for Expr {
         match self {
             Expr::Var(v) => write!(f, "{v}"),
             Expr::SetLiteral(items) => {
-                let mut items: Vec<String> = items.iter().cloned().collect();
+                let mut items: Vec<String> = items.iter().map(|e| e.to_string()).collect();
                 items.sort();
                 write!(f, "{{{}}}", items.join(", "))
             }
@@ -64,8 +141,9 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                  delimited(
                                     '{',
                                     comma_list.map(|s|{
-                                        let set: HashSet<String> = s.iter().map(|x|x.to_string()).collect();
-                                        Expr::SetLiteral(set)
+                                        let set: Vec<String> = s.iter().map(|x|x.to_string()).collect();
+                                        let elems: HashSet<SetElement> = set.iter().map(|e|SetElement::from(e.as_str())).collect();
+                                        Expr::SetLiteral(elems)
                                     }),
                                     cut_err('}')),
                                 empty_set.map(|_|Expr::SetLiteral([].into())),
@@ -103,6 +181,23 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     parser(0).parse_next(i)
 }
 
+// {a,b,c}
+fn non_empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    delimited(
+        '{',
+        comma_list.map(|s| {
+            let set: Vec<String> = s.iter().map(|x| x.to_string()).collect();
+            let elems: HashSet<SetElement> =
+                set.iter().map(|e| SetElement::from(e.as_str())).collect();
+            Expr::SetLiteral(elems)
+        }),
+        cut_err('}'),
+    )
+    .take()
+    .parse_next(i)
+}
+
+// {}
 fn empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     delimited(
         '{',
@@ -113,6 +208,7 @@ fn empty_set<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     .parse_next(i)
 }
 
+// abc123
 fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     trace(
         "identifier",
@@ -125,6 +221,7 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     .parse_next(i)
 }
 
+// abc or {}
 fn set_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
         let element = (
@@ -134,7 +231,7 @@ fn set_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
         trace("set_element", element).take().parse_next(i)
     }
 
-    let element = alt((char_or_num_element, empty_set));
+    let element = alt((char_or_num_element, non_empty_set, empty_set));
     trace("set_element", element).take().parse_next(i)
 }
 
@@ -155,7 +252,7 @@ pub fn eval(expr: &Expr) -> Expr {
             let expr2 = eval(expr2);
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
-                    let inter: HashSet<String> = set1.intersection(&set2).cloned().collect();
+                    let inter: HashSet<_> = set1.intersection(&set2).cloned().collect();
                     Expr::SetLiteral(inter)
                 }
                 _ => todo!(),
@@ -166,7 +263,7 @@ pub fn eval(expr: &Expr) -> Expr {
             let expr2 = eval(expr2);
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
-                    let union: HashSet<String> = set1.union(&set2).cloned().collect();
+                    let union: HashSet<_> = set1.union(&set2).cloned().collect();
                     Expr::SetLiteral(union)
                 }
                 _ => todo!(),
@@ -331,5 +428,35 @@ mod tests {
             Expr::SetLiteral(["a".into(), "b".into()].into()),
             r.unwrap()
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn set_literal_from_empty_string_should_panic() {
+        let _ = Expr::SetLiteral(["".into()].into());
+    }
+
+    #[test]
+    fn set_literal_from_empty_works() {
+        let nested = pratt_parser(&mut "{{{ {}, b }}}");
+        assert!(nested.is_ok());
+        match nested.unwrap() {
+            Expr::SetLiteral(inner1) => {
+                let inner1: Vec<&SetElement> = inner1.iter().collect();
+                if let SetElement::Set(inner2) = inner1[0] {
+                    let inner2: Vec<&SetElement> = inner2.iter().collect();
+                    if let SetElement::Set(inner3) = inner2[0] {
+                        assert_eq!(inner3.len(), 2)
+                    } else if let SetElement::Elem(v) = inner2[0] {
+                        assert_eq!(v, "")
+                    } else {
+                        panic!("expected something else for inner2")
+                    }
+                } else {
+                    panic!("expected something else for inner1")
+                }
+            }
+            _ => panic!("expected something else"),
+        }
     }
 }
