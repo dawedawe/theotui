@@ -65,6 +65,7 @@ pub enum Expr {
     Not(Box<Expr>),
     Intersection(Box<Expr>, Box<Expr>),
     Union(Box<Expr>, Box<Expr>),
+    Diff(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
 }
 
@@ -81,6 +82,7 @@ impl Display for Expr {
             Expr::Not(_expr) => todo!(),
             Expr::Intersection(expr1, expr2) => write!(f, "{} n {}", expr1, expr2),
             Expr::Union(expr1, expr2) => write!(f, "{} u {}", expr1, expr2),
+            Expr::Diff(expr1, expr2) => write!(f, "{} \\ {}", expr1, expr2),
             Expr::Paren(expr) => write!(f, "({})", expr),
             Expr::Element(set_element) => write!(f, "{}", set_element),
         }
@@ -207,6 +209,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     dispatch! {any;
                         'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
                         'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
+                        '\\' => Left(4, |_: &mut _, a, b| Ok(Expr::Diff(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -251,6 +254,17 @@ pub fn eval(expr: &Expr) -> Expr {
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.union(&set2).cloned().collect();
+                    Expr::SetLiteral(union)
+                }
+                _ => todo!(),
+            }
+        }
+        Expr::Diff(expr1, expr2) => {
+            let expr1 = eval(expr1);
+            let expr2 = eval(expr2);
+            match (expr1, expr2) {
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let union: HashSet<_> = set1.difference(&set2).cloned().collect();
                     Expr::SetLiteral(union)
                 }
                 _ => todo!(),
@@ -382,6 +396,13 @@ mod tests {
             Expr::SetLiteral(["b".into(), "c".into()].into()),
             r.unwrap()
         );
+    }
+
+    #[test]
+    fn eval_of_a_diff_works() {
+        let r = run("{ a,c } \\ {b,c}");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(["a".into()].into()), r.unwrap());
     }
 
     #[test]
