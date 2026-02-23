@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
 
@@ -187,7 +188,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                     Expr::SetLiteral(hash_set)
                                 }
                                 ), cut_err('}')),
-                            _ => char_or_num_element.map(|s| Expr::Element(s.to_string())),
+                            _ => identifier.map(|s| Expr::Var(s.to_string())),
                         },
                     )),
                     multispace0,
@@ -210,6 +211,12 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                         'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
                         'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
                         '\\' => Left(4, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
+                        '=' => Left(4, |_: &mut _, a, b| {
+                            match(a, &b) {
+                                (Expr::Var(i), Expr::SetLiteral(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                _ => Err(ErrMode::Cut(ContextError::default()))
+                            }
+                        }),
                         _ => fail
                     },
                 )),
@@ -229,17 +236,33 @@ fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     trace("char_or_num_element", element).take().parse_next(i)
 }
 
-pub fn eval(expr: &Expr) -> Expr {
+fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    let identifier = (
+        one_of(|c: char| c.is_alpha()),
+        take_while(0.., |c: char| c.is_alphanum() || c == '_'),
+    );
+    trace("identifier", identifier).take().parse_next(i)
+}
+
+type Assignment = HashMap<String, Expr>;
+
+pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Expr {
     match expr {
         Expr::Element(_) => expr.clone(),
-        Expr::Var(_) => expr.clone(),
-        Expr::Paren(a) => eval(a),
+        Expr::Var(ident) => {
+            let expr = assignment[ident].clone();
+            eval(assignment, &expr)
+        }
+        Expr::Paren(expr) => eval(assignment, expr),
         Expr::SetLiteral(_items) => expr.clone(),
-        Expr::SetDecl(_, _expr) => todo!(),
+        Expr::SetDecl(ident, expr) => {
+            assignment.insert(ident.to_string(), *expr.clone());
+            eval(assignment, expr)
+        }
         Expr::Not(_expr) => todo!(),
         Expr::Intersection(expr1, expr2) => {
-            let expr1 = eval(expr1);
-            let expr2 = eval(expr2);
+            let expr1 = eval(assignment, expr1);
+            let expr2 = eval(assignment, expr2);
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let inter: HashSet<_> = set1.intersection(&set2).cloned().collect();
@@ -249,8 +272,8 @@ pub fn eval(expr: &Expr) -> Expr {
             }
         }
         Expr::Union(expr1, expr2) => {
-            let expr1 = eval(expr1);
-            let expr2 = eval(expr2);
+            let expr1 = eval(assignment, expr1);
+            let expr2 = eval(assignment, expr2);
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.union(&set2).cloned().collect();
@@ -260,8 +283,8 @@ pub fn eval(expr: &Expr) -> Expr {
             }
         }
         Expr::Difference(expr1, expr2) => {
-            let expr1 = eval(expr1);
-            let expr2 = eval(expr2);
+            let expr1 = eval(assignment, expr1);
+            let expr2 = eval(assignment, expr2);
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.difference(&set2).cloned().collect();
@@ -275,8 +298,9 @@ pub fn eval(expr: &Expr) -> Expr {
 
 pub fn run(formula: &str) -> Result<Expr, String> {
     let input = formula.to_string();
+    let mut a = HashMap::new();
     match pratt_parser(&mut input.as_str()) {
-        Ok(expr) => Ok(eval(&expr)),
+        Ok(expr) => Ok(eval(&mut a, &expr)),
         Err(e) => Result::Err(e.to_string()),
     }
 }
@@ -290,7 +314,7 @@ mod tests {
         let mut input = "a";
         let expr = pratt_parser(&mut input);
         assert!(expr.is_ok());
-        assert_eq!(Expr::Element("a".into()), expr.unwrap());
+        assert_eq!(Expr::Var("a".into()), expr.unwrap());
         assert_eq!("", input);
     }
 
@@ -481,5 +505,29 @@ mod tests {
         hash_set2.insert(SetElement::Set(hash_set1));
         let nested_empty = Expr::SetLiteral(hash_set2);
         assert_eq!(s, nested_empty)
+    }
+
+    #[test]
+    fn parsing_a_declaration_works() {
+        let s = pratt_parser(&mut "A = { a, b }");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        let lit = Expr::SetLiteral(["a".into(), "b".into()].into());
+        let decl = Expr::SetDecl("A".into(), Box::new(lit));
+        assert_eq!(s, decl)
+    }
+
+    #[test]
+    fn evaluating_an_ident_works() {
+        let lit1 = Expr::SetLiteral(["a".into(), "b".into()].into());
+        let lit2 = Expr::SetLiteral(["c".into(), "d".into()].into());
+        let mut assignment: Assignment = HashMap::new();
+        assignment.insert("A".into(), lit1.clone());
+        assignment.insert("B".into(), lit2.clone());
+        let expr = pratt_parser(&mut "A");
+        assert!(expr.is_ok());
+        let expr = expr.unwrap();
+        let e = eval(&mut assignment, &expr);
+        assert_eq!(e, lit1)
     }
 }
