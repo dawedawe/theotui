@@ -246,49 +246,52 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
 
 type Assignment = HashMap<String, Expr>;
 
-pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Expr {
+pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
     match expr {
-        Expr::Element(_) => expr.clone(),
+        Expr::Element(_) => Ok(expr.clone()),
         Expr::Var(ident) => {
-            let expr = assignment[ident].clone();
+            let expr = assignment
+                .get(ident)
+                .cloned()
+                .ok_or(format!("identifier {ident} not found"))?;
             eval(assignment, &expr)
         }
         Expr::Paren(expr) => eval(assignment, expr),
-        Expr::SetLiteral(_items) => expr.clone(),
+        Expr::SetLiteral(_items) => Ok(expr.clone()),
         Expr::SetDecl(ident, expr) => {
             assignment.insert(ident.to_string(), *expr.clone());
             eval(assignment, expr)
         }
         Expr::Not(_expr) => todo!(),
         Expr::Intersection(expr1, expr2) => {
-            let expr1 = eval(assignment, expr1);
-            let expr2 = eval(assignment, expr2);
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let inter: HashSet<_> = set1.intersection(&set2).cloned().collect();
-                    Expr::SetLiteral(inter)
+                    Ok(Expr::SetLiteral(inter))
                 }
                 _ => todo!(),
             }
         }
         Expr::Union(expr1, expr2) => {
-            let expr1 = eval(assignment, expr1);
-            let expr2 = eval(assignment, expr2);
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.union(&set2).cloned().collect();
-                    Expr::SetLiteral(union)
+                    Ok(Expr::SetLiteral(union))
                 }
                 _ => todo!(),
             }
         }
         Expr::Difference(expr1, expr2) => {
-            let expr1 = eval(assignment, expr1);
-            let expr2 = eval(assignment, expr2);
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.difference(&set2).cloned().collect();
-                    Expr::SetLiteral(union)
+                    Ok(Expr::SetLiteral(union))
                 }
                 _ => todo!(),
             }
@@ -299,16 +302,19 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Expr {
 pub fn run(formula: &str) -> Result<Expr, String> {
     let lines = formula.trim().lines();
     let mut a = HashMap::new();
-    let results = lines
+    let results: Vec<_> = lines
         .into_iter()
         .map(|mut line| match pratt_parser(&mut line) {
-            Ok(expr) => {
-                eval(&mut a, &expr);
-                Ok(eval(&mut a, &expr))
-            }
+            Ok(expr) => eval(&mut a, &expr),
             Err(e) => Result::Err(e.to_string()),
-        });
-    results.last().unwrap()
+        })
+        .collect();
+    let (oks, errs): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| (r).is_ok());
+    if errs.is_empty() {
+        oks.into_iter().last().unwrap()
+    } else {
+        errs.into_iter().next().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -533,14 +539,28 @@ mod tests {
         let expr = pratt_parser(&mut "A");
         assert!(expr.is_ok());
         let expr = expr.unwrap();
-        let e = eval(&mut assignment, &expr);
-        assert_eq!(e, lit1)
+        let r = eval(&mut assignment, &expr);
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), lit1)
     }
 
     #[test]
-    fn evaluation_with_assignments_works() {
+    fn run_with_assignments_works() {
         let r = run("A = {a,b}\nB = {b,c}\nA n B");
         assert!(r.is_ok());
         assert_eq!(Expr::SetLiteral(["b".into()].into()), r.unwrap());
+    }
+
+    #[test]
+    fn run_returns_first_parsing_error() {
+        let r = run("A = {a,b}\nB = #b,c}\nA n B");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn run_return_first_eval_error() {
+        let r = run("A = {a,b}\nB\nA");
+        assert!(r.is_err());
+        assert!(r.err().unwrap().contains("B not found"));
     }
 }
