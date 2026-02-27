@@ -1,4 +1,5 @@
 use ratatui::widgets::{ScrollbarState, TableState};
+use ratatui_textarea::TextArea;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
 #[derive(Debug, Default, PartialEq)]
@@ -56,20 +57,20 @@ pub(crate) enum SetTheoryResult {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct SetTheoryModel {
-    pub(crate) formula_input_state: InputState,
+pub(crate) struct SetTheoryModel<'a> {
+    pub(crate) term_textarea: TextArea<'a>,
     pub(crate) result: SetTheoryResult,
 }
 
 #[derive(Debug)]
-pub(crate) struct Model {
+pub(crate) struct Model<'a> {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) proplogic_state: PropositionalLogicModel,
-    pub(crate) settheory_state: SetTheoryModel,
+    pub(crate) settheory_state: SetTheoryModel<'a>,
 }
 
-impl Default for Model {
+impl<'a> Default for Model<'a> {
     fn default() -> Self {
         Self {
             running: true,

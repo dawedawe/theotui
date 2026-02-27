@@ -45,18 +45,19 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         (SelectedTopic::PropositionalLogic, KeyCode::Down) => {
             Some(Msg::PropLogicMsg(PropLogicMsg::ScrollDown))
         }
-        (SelectedTopic::SetTheory, KeyCode::Enter) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
+        (SelectedTopic::SetTheory, KeyCode::F(5)) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
         (_, KeyCode::Tab) => Some(Msg::NextTab),
         (_, KeyCode::BackTab) => Some(Msg::PrevTab),
-        (_, _) => {
-            let input = match model.selected_topic {
-                SelectedTopic::PropositionalLogic => &mut model.proplogic_state.formula_input_state,
-                SelectedTopic::SetTheory => &mut model.settheory_state.formula_input_state,
-            };
-            let mut tmp_input = Input::new(input.value.clone()).with_cursor(input.cursor);
+        (SelectedTopic::PropositionalLogic, _) => {
+            let mut tmp_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
+                .with_cursor(model.proplogic_state.formula_input_state.cursor);
             tmp_input.handle_event(&Event::Key(key));
-            input.cursor = tmp_input.cursor();
-            input.value = tmp_input.value().into();
+            model.proplogic_state.formula_input_state.cursor = tmp_input.cursor();
+            model.proplogic_state.formula_input_state.value = tmp_input.value().into();
+            None
+        }
+        (SelectedTopic::SetTheory, _) => {
+            model.settheory_state.term_textarea.input(key);
             None
         }
     }
@@ -131,8 +132,8 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             }
         }
         Msg::SetTheoryMsg(SetTheoryMsg::Eval) => {
-            let r =
-                theoinf::set_theory::run(model.settheory_state.formula_input_state.value.as_str());
+            let terms = model.settheory_state.term_textarea.lines().join("\n");
+            let r = theoinf::set_theory::run(terms.as_str());
             match r {
                 Ok(expr) => model.settheory_state.result = SetTheoryResult::Expr(expr),
                 Err(e) => model.settheory_state.result = SetTheoryResult::Error(e),

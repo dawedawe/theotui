@@ -297,12 +297,18 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Expr {
 }
 
 pub fn run(formula: &str) -> Result<Expr, String> {
-    let input = formula.to_string();
+    let lines = formula.trim().lines();
     let mut a = HashMap::new();
-    match pratt_parser(&mut input.as_str()) {
-        Ok(expr) => Ok(eval(&mut a, &expr)),
-        Err(e) => Result::Err(e.to_string()),
-    }
+    let results = lines
+        .into_iter()
+        .map(|mut line| match pratt_parser(&mut line) {
+            Ok(expr) => {
+                eval(&mut a, &expr);
+                Ok(eval(&mut a, &expr))
+            }
+            Err(e) => Result::Err(e.to_string()),
+        });
+    results.last().unwrap()
 }
 
 #[cfg(test)]
@@ -529,5 +535,12 @@ mod tests {
         let expr = expr.unwrap();
         let e = eval(&mut assignment, &expr);
         assert_eq!(e, lit1)
+    }
+
+    #[test]
+    fn evaluation_with_assignments_works() {
+        let r = run("A = {a,b}\nB = {b,c}\nA n B");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(["b".into()].into()), r.unwrap());
     }
 }

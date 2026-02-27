@@ -219,7 +219,7 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .margin(2)
         .constraints(
             [
-                Constraint::Length(3),  // term input
+                Constraint::Length(7),  // term input
                 Constraint::Length(20), // result
                 Constraint::Min(1),
                 Constraint::Length(1),
@@ -232,22 +232,34 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let result_rect = center_horizontal(tab_content_chunks[1], 100);
 
     // render term input
-    let term_input = Input::new(model.settheory_state.formula_input_state.value.clone())
-        .with_cursor(model.settheory_state.formula_input_state.cursor);
-    let term_width = term_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
-    let term_scroll = term_input.visual_scroll(term_width as usize);
-    let term_paragraph = Paragraph::new(term_input.value())
-        .style(default_style)
-        .scroll((0, term_scroll as u16))
-        .block(Block::default().borders(Borders::ALL).title(" Term "));
-    frame.render_widget(term_paragraph, term_rect);
+    // let term_input = Input::new(model.settheory_state.formula_input_state.value.clone())
+    //     .with_cursor(model.settheory_state.formula_input_state.cursor);
+    // let term_width = term_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
+    // let term_scroll = term_input.visual_scroll(term_width as usize);
+    // let term_paragraph = Paragraph::new(term_input.value())
+    //     .style(default_style)
+    //     .scroll((0, term_scroll as u16))
+    //     .block(Block::default().borders(Borders::ALL).title(" Term "));
+    // frame.render_widget(&model.settheory_state.term_textarea, term_rect);
 
-    frame.set_cursor_position((
-        // Put cursor past the end of the input text
-        term_rect.x + ((term_input.visual_cursor()).max(term_scroll) - term_scroll) as u16 + 1,
-        // Move one line down, from the border to the input line
-        term_rect.y + 1,
-    ));
+    // frame.set_cursor_position((
+    //     // Put cursor past the end of the input text
+    //     term_rect.x + ((term_input.visual_cursor()).max(term_scroll) - term_scroll) as u16 + 1,
+    //     // Move one line down, from the border to the input line
+    //     term_rect.y + 1,
+    // ));
+
+    let editor_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Term ")
+        .style(default_style);
+
+    frame.render_widget(editor_block, term_rect);
+    let editor_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(term_rect);
+    frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
 
     // render eval result
     match &model.settheory_state.result {
