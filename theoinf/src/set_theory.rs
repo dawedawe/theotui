@@ -216,6 +216,10 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                         '=' => Left(1, |_: &mut _, a, b| {
                             match(a, &b) {
                                 (Expr::Var(i), Expr::SetLiteral(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                (Expr::Var(i), Expr::Union(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                (Expr::Var(i), Expr::Intersection(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                (Expr::Var(i), Expr::Difference(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                (Expr::Var(i), Expr::Complement(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 _ => Err(ErrMode::Cut(ContextError::default()))
                             }
                         }),
@@ -587,6 +591,13 @@ mod tests {
     #[test]
     fn run_with_assignments_works() {
         let r = run("A = {a,b}\nB = {b,c}\nA n B");
+        assert!(r.is_ok());
+        assert_eq!(Expr::SetLiteral(["b".into()].into()), r.unwrap());
+    }
+
+    #[test]
+    fn run_with_operations_on_idents_works() {
+        let r = run("A = {a,b}\nB = {b,c}\nC = A n B\nC");
         assert!(r.is_ok());
         assert_eq!(Expr::SetLiteral(["b".into()].into()), r.unwrap());
     }
