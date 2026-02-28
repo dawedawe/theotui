@@ -22,6 +22,8 @@ use winnow::token::any;
 use winnow::token::one_of;
 use winnow::token::take_while;
 
+const UNI_IDENT: &str = "UNI";
+
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum SetElement {
     Elem(String),
@@ -33,7 +35,7 @@ impl From<&str> for SetElement {
     fn from(value: &str) -> Self {
         element_parser(0)
             .parse(value)
-            .expect("can't construct SetElement from given value")
+            .expect("Can't construct SetElement from given value.")
     }
 }
 
@@ -63,7 +65,7 @@ pub enum Expr {
     Element(String),
     SetLiteral(HashSet<SetElement>),
     SetDecl(String, Box<Expr>),
-    Not(Box<Expr>),
+    Complement(Box<Expr>),
     Intersection(Box<Expr>, Box<Expr>),
     Union(Box<Expr>, Box<Expr>),
     Difference(Box<Expr>, Box<Expr>),
@@ -79,8 +81,8 @@ impl Display for Expr {
                 items.sort();
                 write!(f, "{{{}}}", items.join(", "))
             }
-            Expr::SetDecl(_, _expr) => todo!(),
-            Expr::Not(_expr) => todo!(),
+            Expr::SetDecl(ident, expr) => write!(f, "{ident} = {expr}"),
+            Expr::Complement(expr) => write!(f, "!{expr}"),
             Expr::Intersection(expr1, expr2) => write!(f, "{expr1} n {expr2}"),
             Expr::Union(expr1, expr2) => write!(f, "{expr1} u {expr2}"),
             Expr::Difference(expr1, expr2) => write!(f, "{expr1} \\ {expr2}"),
@@ -199,7 +201,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                 delimited(
                     multispace0,
                     dispatch! {any;
-                        '!' => Prefix(100, |_: &mut _, a| Ok(Expr::Not(Box::new(a)))),
+                        '!' => Prefix(100, |_: &mut _, a| Ok(Expr::Complement(Box::new(a)))),
                         _ => fail
                     },
                     multispace0,
@@ -210,8 +212,8 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     dispatch! {any;
                         'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
                         'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
-                        '\\' => Left(4, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
-                        '=' => Left(4, |_: &mut _, a, b| {
+                        '\\' => Left(2, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
+                        '=' => Left(1, |_: &mut _, a, b| {
                             match(a, &b) {
                                 (Expr::Var(i), Expr::SetLiteral(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 _ => Err(ErrMode::Cut(ContextError::default()))
@@ -253,16 +255,45 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
             let expr = assignment
                 .get(ident)
                 .cloned()
-                .ok_or(format!("identifier {ident} not found"))?;
+                .ok_or(format!("Identifier {ident} not found."))?;
             eval(assignment, &expr)
         }
         Expr::Paren(expr) => eval(assignment, expr),
-        Expr::SetLiteral(_items) => Ok(expr.clone()),
-        Expr::SetDecl(ident, expr) => {
-            assignment.insert(ident.to_string(), *expr.clone());
-            eval(assignment, expr)
+        Expr::SetLiteral(items) => {
+            if let Some(uni) = assignment.get(UNI_IDENT).cloned() {
+                match uni {
+                    Expr::SetLiteral(hash_set) => {
+                        for item in items {
+                            if !hash_set.contains(item) {
+                                return Err(format!(
+                                    "Element '{item}' not in declared universe set '{UNI_IDENT}'."
+                                ));
+                            }
+                        }
+                    }
+                    _ => return Err("UNI must be a set literal.".to_string()),
+                }
+            }
+
+            Ok(expr.clone())
         }
-        Expr::Not(_expr) => todo!(),
+        Expr::SetDecl(ident, set_expr) => {
+            if ident == UNI_IDENT && !assignment.is_empty() {
+                Err(format!(
+                    "The universe set '{UNI_IDENT}' must be the first declaration."
+                ))
+            } else {
+                assignment.insert(ident.to_string(), *set_expr.clone());
+                Ok(expr.clone())
+            }
+        }
+        Expr::Complement(expr) => {
+            let uni = assignment.get(UNI_IDENT).cloned().ok_or(format!(
+                "For complement operations the universe '{UNI_IDENT}' must be declared as the first set."
+            ))?;
+            let diff = Expr::Difference(Box::new(uni), expr.clone());
+            eval(assignment, &diff)
+        }
         Expr::Intersection(expr1, expr2) => {
             let expr1 = eval(assignment, expr1)?;
             let expr2 = eval(assignment, expr2)?;
@@ -530,6 +561,15 @@ mod tests {
     }
 
     #[test]
+    fn parsing_a_complement_works() {
+        let ast = pratt_parser(&mut "!A");
+        assert!(ast.is_ok());
+        let s = ast.unwrap();
+        let comp = Expr::Complement(Box::new(Expr::Var("A".into())));
+        assert_eq!(comp, s)
+    }
+
+    #[test]
     fn evaluating_an_ident_works() {
         let lit1 = Expr::SetLiteral(["a".into(), "b".into()].into());
         let lit2 = Expr::SetLiteral(["c".into(), "d".into()].into());
@@ -562,5 +602,27 @@ mod tests {
         let r = run("A = {a,b}\nB\nA");
         assert!(r.is_err());
         assert!(r.err().unwrap().contains("B not found"));
+    }
+
+    #[test]
+    fn evaluation_of_complement_works() {
+        let r = run("UNI = {a,b,c}\nA = {a}\n!A");
+        assert!(r.is_ok());
+        assert_eq!(
+            Expr::SetLiteral(["b".into(), "c".into()].into()),
+            r.unwrap()
+        );
+    }
+
+    #[test]
+    fn enforcing_uni_works() {
+        let r = run("UNI = {a,b,c}\nA = {22}\nA");
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn uni_must_be_the_first_declaration() {
+        let r = run("A = {a}\nUNI = {a,b,c}\nA");
+        assert!(r.is_err());
     }
 }
