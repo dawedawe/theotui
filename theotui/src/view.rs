@@ -1,26 +1,67 @@
-use crate::model::Model;
+use crate::model::{Model, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
     style::{Color, Style},
     widgets::{
-        Block, Borders, Cell, Paragraph, Row, Scrollbar, ScrollbarOrientation, ScrollbarState,
-        Table,
+        Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+        ScrollbarState, Table,
     },
 };
+use strum::IntoEnumIterator;
 use tui_input::Input;
 
-pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
-    fn center_horizontal(area: Rect, width: u16) -> Rect {
-        let [area] = Layout::horizontal([Constraint::Length(width)])
-            .flex(Flex::Center)
-            .areas(area);
-        area
-    }
+fn center_horizontal(area: Rect, width: u16) -> Rect {
+    let [area] = Layout::horizontal([Constraint::Length(width)])
+        .flex(Flex::Center)
+        .areas(area);
+    area
+}
 
-    let default_style = Style::default().fg(Color::Green);
+fn default_style() -> Style {
+    Style::default().fg(Color::Green)
+}
+pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
+    let default_style = default_style();
 
     let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .margin(2)
+        .constraints(
+            [
+                Constraint::Length(50), // tabs input
+                Constraint::Min(1),     // tab content
+            ]
+            .as_ref(),
+        )
+        .split(frame.area());
+
+    let tabs_rect = chunks[0];
+    let tab_content_rect = chunks[1];
+    //
+    // render topic list
+    let items = SelectedTopic::iter().map(|t| t.to_string());
+    let highlight_style = default_style.bold();
+    let selected_tab_index = model.selected_topic as usize;
+    let topic_list = List::new(items)
+        .style(default_style)
+        .highlight_style(highlight_style.bold())
+        .highlight_symbol("> ")
+        .highlight_spacing(ratatui::widgets::HighlightSpacing::Always);
+    let mut topic_list_state = ListState::default().with_selected(Some(selected_tab_index));
+
+    frame.render_stateful_widget(topic_list, tabs_rect, &mut topic_list_state);
+
+    match model.selected_topic {
+        SelectedTopic::PropositionalLogic => render_proplogic(frame, tab_content_rect, model),
+        SelectedTopic::SetTheory => render_settheory(frame, tab_content_rect, model),
+    }
+}
+
+fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    let default_style = default_style();
+
+    let tab_content_chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints(
@@ -33,15 +74,15 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
             ]
             .as_ref(),
         )
-        .split(frame.area());
+        .split(rect);
 
-    let formula_rect = center_horizontal(chunks[0], 100);
-    let classification_rect = center_horizontal(chunks[1], 100);
-    let result_rect = center_horizontal(chunks[2], 100);
+    let formula_rect = center_horizontal(tab_content_chunks[0], 100);
+    let classification_rect = center_horizontal(tab_content_chunks[1], 100);
+    let result_rect = center_horizontal(tab_content_chunks[2], 100);
 
     // render formula input
-    let formula_input = Input::new(model.formula_input_state.value.clone())
-        .with_cursor(model.formula_input_state.cursor);
+    let formula_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
+        .with_cursor(model.proplogic_state.formula_input_state.cursor);
     let formula_width = formula_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
     let formula_scroll = formula_input.visual_scroll(formula_width as usize);
     let formula_paragraph = Paragraph::new(formula_input.value())
@@ -60,15 +101,15 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
     ));
 
     // render eval result
-    match &model.output {
-        crate::model::PropLogicOutput::None => (),
-        crate::model::PropLogicOutput::Error(e) => {
+    match &model.proplogic_state.result {
+        crate::model::PropLogicResult::None => (),
+        crate::model::PropLogicResult::Error(e) => {
             let result_paragraph = Paragraph::new(e.clone())
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
             frame.render_widget(result_paragraph, result_rect);
         }
-        crate::model::PropLogicOutput::Literal(eval_result) => {
+        crate::model::PropLogicResult::Literal(eval_result) => {
             // render formula classification
             let classification = if *eval_result {
                 "φ ∈ SAT, ⊢ φ"
@@ -89,10 +130,10 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
             frame.render_widget(result_paragraph, result_rect);
         }
-        crate::model::PropLogicOutput::Table(table) if table.rows.is_empty() => {
+        crate::model::PropLogicResult::Table(table) if table.rows.is_empty() => {
             panic!("should not happen")
         }
-        crate::model::PropLogicOutput::Table(table) => {
+        crate::model::PropLogicResult::Table(table) => {
             // render formula classification
             let classification = {
                 let mut c = "".to_string();
@@ -155,11 +196,87 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
                 .header(header)
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
-            frame.render_stateful_widget(t, result_rect, &mut model.truth_table_state);
+            frame.render_stateful_widget(
+                t,
+                result_rect,
+                &mut model.proplogic_state.truth_table_state,
+            );
 
-            render_scrollbar(frame, result_rect, &mut model.truth_table_scroll_state);
+            render_scrollbar(
+                frame,
+                result_rect,
+                &mut model.proplogic_state.truth_table_scroll_state,
+            );
         }
     };
+}
+
+fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    let default_style = default_style();
+
+    let tab_content_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints(
+            [
+                Constraint::Length(7),  // term input
+                Constraint::Length(20), // result
+                Constraint::Min(1),
+                Constraint::Length(1),
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let term_rect = center_horizontal(tab_content_chunks[0], 100);
+    let result_rect = center_horizontal(tab_content_chunks[1], 100);
+
+    // render term input
+    // let term_input = Input::new(model.settheory_state.formula_input_state.value.clone())
+    //     .with_cursor(model.settheory_state.formula_input_state.cursor);
+    // let term_width = term_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
+    // let term_scroll = term_input.visual_scroll(term_width as usize);
+    // let term_paragraph = Paragraph::new(term_input.value())
+    //     .style(default_style)
+    //     .scroll((0, term_scroll as u16))
+    //     .block(Block::default().borders(Borders::ALL).title(" Term "));
+    // frame.render_widget(&model.settheory_state.term_textarea, term_rect);
+
+    // frame.set_cursor_position((
+    //     // Put cursor past the end of the input text
+    //     term_rect.x + ((term_input.visual_cursor()).max(term_scroll) - term_scroll) as u16 + 1,
+    //     // Move one line down, from the border to the input line
+    //     term_rect.y + 1,
+    // ));
+
+    let editor_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Term ")
+        .style(default_style);
+
+    frame.render_widget(editor_block, term_rect);
+    let editor_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(term_rect);
+    frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
+
+    // render eval result
+    match &model.settheory_state.result {
+        &crate::model::SetTheoryResult::None => (),
+        crate::model::SetTheoryResult::Error(e) => {
+            let result_paragraph = Paragraph::new(e.clone())
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            frame.render_widget(result_paragraph, result_rect);
+        }
+        crate::model::SetTheoryResult::Expr(eval_result) => {
+            let result_paragraph = Paragraph::new(eval_result.to_string())
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            frame.render_widget(result_paragraph, result_rect);
+        }
+    }
 }
 
 fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarState) {

@@ -11,3 +11,5 @@ theoinf = { path = "../theoinf", version = "0.1.0"}
 ratatui = "0.30.0"
 color-eyre = "0.6.5"
 tui-input = "0.15.0"
+strum = "0.27.2"
+ratatui-textarea = "0.8.0"
