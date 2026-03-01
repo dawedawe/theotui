@@ -140,7 +140,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 if table.is_sat() {
                     c.push_str("φ ∈ SAT");
                     if table.is_tautology() {
-                        c.push_str(", ⊢ φ");
+                        c.push_str(", ⊨ φ");
                     }
                 } else {
                     c.push_str("φ ∉ SAT");
