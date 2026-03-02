@@ -241,6 +241,10 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .margin(1)
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(term_rect);
+    model
+        .settheory_state
+        .term_textarea
+        .set_cursor_line_style(default_style);
     frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
 
     // render eval result
