@@ -20,6 +20,7 @@ use winnow::error::ErrMode;
 use winnow::stream::AsChar;
 use winnow::token::any;
 use winnow::token::one_of;
+use winnow::token::take;
 use winnow::token::take_while;
 
 const UNI_IDENT: &str = "UNI";
@@ -70,6 +71,9 @@ pub enum Expr {
     Union(Box<Expr>, Box<Expr>),
     Difference(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
+    Subset(Box<Expr>, Box<Expr>),
+    StrictSubset(Box<Expr>, Box<Expr>),
+    Bool(bool),
 }
 
 impl Display for Expr {
@@ -88,6 +92,9 @@ impl Display for Expr {
             Expr::Difference(expr1, expr2) => write!(f, "{expr1} \\ {expr2}"),
             Expr::Paren(expr) => write!(f, "({expr})"),
             Expr::Element(set_element) => write!(f, "{set_element}"),
+            Expr::Bool(b) => write!(f, "{b}"),
+            Expr::Subset(expr1, expr2) => write!(f, "{expr1} ⊆ {expr2}"),
+            Expr::StrictSubset(expr1, expr2) => write!(f, "{expr1} ⊂ {expr2}"),
         }
     }
 }
@@ -209,10 +216,15 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             )
             .infix(
                 alt((
+                    dispatch! {take(2usize);
+                        "c=" =>  Left(1, |_: &mut _, a, b| Ok(Expr::Subset(Box::new(a), Box::new(b)))),
+                        _ => fail
+                    },
                     dispatch! {any;
                         'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
                         'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
                         '\\' => Left(2, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
+                        'c' => Left(1, |_: &mut _, a, b| Ok(Expr::StrictSubset(Box::new(a), Box::new(b)))),
                         '=' => Left(1, |_: &mut _, a, b| {
                             match(a, &b) {
                                 (Expr::Var(i), Expr::SetLiteral(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
@@ -306,7 +318,7 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
                     let inter: HashSet<_> = set1.intersection(&set2).cloned().collect();
                     Ok(Expr::SetLiteral(inter))
                 }
-                _ => todo!(),
+                _ => Err("invalid expression".to_string()),
             }
         }
         Expr::Union(expr1, expr2) => {
@@ -317,7 +329,7 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
                     let union: HashSet<_> = set1.union(&set2).cloned().collect();
                     Ok(Expr::SetLiteral(union))
                 }
-                _ => todo!(),
+                _ => Err("invalid expression".to_string()),
             }
         }
         Expr::Difference(expr1, expr2) => {
@@ -328,9 +340,34 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
                     let union: HashSet<_> = set1.difference(&set2).cloned().collect();
                     Ok(Expr::SetLiteral(union))
                 }
-                _ => todo!(),
+                _ => Err("invalid expression".to_string()),
             }
         }
+        Expr::Subset(expr1, expr2) => {
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
+            match (expr1, expr2) {
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let is_subset = set1.is_subset(&set2);
+                    Ok(Expr::Bool(is_subset))
+                }
+                _ => Err("invalid expression".to_string()),
+            }
+        }
+        Expr::StrictSubset(expr1, expr2) => {
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
+            match (expr1, expr2) {
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let is_subset = set1.is_subset(&set2);
+                    let is_unequal = set1 != set2;
+                    let is_strict_subset = is_subset && is_unequal;
+                    Ok(Expr::Bool(is_strict_subset))
+                }
+                _ => Err("invalid expression".to_string()),
+            }
+        }
+        Expr::Bool(_) => Ok(expr.clone()),
     }
 }
 
@@ -635,5 +672,19 @@ mod tests {
     fn uni_must_be_the_first_declaration() {
         let r = run("A = {a}\nUNI = {a,b,c}\nA");
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn evaluation_of_subset_works() {
+        let r = run("A = {a,b}\nB = {a,b}\nA c= B");
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_strictsubset_works() {
+        let r = run("A = {a,b}\nB = {a,b,c}\nA c B");
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
     }
 }
