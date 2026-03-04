@@ -73,7 +73,9 @@ pub enum Expr {
     Paren(Box<Expr>),
     Subset(Box<Expr>, Box<Expr>),
     StrictSubset(Box<Expr>, Box<Expr>),
+    Cardinality(Box<Expr>),
     Bool(bool),
+    Int(usize),
 }
 
 impl Display for Expr {
@@ -95,6 +97,8 @@ impl Display for Expr {
             Expr::Bool(b) => write!(f, "{b}"),
             Expr::Subset(expr1, expr2) => write!(f, "{expr1} ⊆ {expr2}"),
             Expr::StrictSubset(expr1, expr2) => write!(f, "{expr1} ⊂ {expr2}"),
+            Expr::Cardinality(expr) => write!(f, "|{expr}|"),
+            Expr::Int(i) => write!(f, "{i}"),
         }
     }
 }
@@ -177,6 +181,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     multispace0,
                     alt ((
                         dispatch! {peek(any);
+                            '|' => delimited('|',  parser(0).map(|e| Expr::Cardinality(Box::new(e))), cut_err('|')),
                             '(' => delimited('(',  parser(0).map(|e| Expr::Paren(Box::new(e))), cut_err(')')),
                             '{' => delimited('{',  opt(element_parser(0)).map(|e|
                                 {
@@ -368,6 +373,14 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
             }
         }
         Expr::Bool(_) => Ok(expr.clone()),
+        Expr::Cardinality(expr) => {
+            let expr = eval(assignment, expr)?;
+            match expr {
+                Expr::SetLiteral(set) => Ok(Expr::Int(set.len())),
+                _ => Err("invalid expression".to_string()),
+            }
+        }
+        Expr::Int(_) => Ok(expr.clone()),
     }
 }
 
@@ -686,5 +699,12 @@ mod tests {
         let r = run("A = {a,b}\nB = {a,b,c}\nA c B");
         assert!(r.is_ok());
         assert_eq!(Expr::Bool(true), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_cardinality_works() {
+        let r = run("|{a,b,c}|");
+        assert!(r.is_ok());
+        assert_eq!(Expr::Int(3), r.unwrap());
     }
 }
