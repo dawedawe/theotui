@@ -1,4 +1,4 @@
-use crate::model::{Model, SelectedTopic};
+use crate::model::{Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
@@ -176,29 +176,51 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 .rows
                 .iter()
                 .enumerate()
-                .map(|(idx, (assignment, result))| {
+                .filter_map(|(idx, (assignment, result))| {
+                    let show_row = match model.proplogic_state.result_filter {
+                        Some(PropLogicResultFilter::OnlyFalse) => !*result,
+                        Some(PropLogicResultFilter::OnlyTrue) => *result,
+                        _ => true,
+                    };
+                    if show_row {
+                        let mut bools = vec![];
+                        bools.push((idx + 1).to_string());
+                        vars.iter()
+                            .for_each(|var| bools.push(assignment[var].to_string()));
+                        bools.push(result.to_string());
+                        Some(
+                            bools.into_iter().map(Cell::from).collect::<Row>(), // .style(row_style),
+                        )
+                    } else {
+                        None
+                    }
+                })
+                .enumerate()
+                .map(|(idx, row)| {
                     let row_style = match idx % 2 {
                         0 => default_style,
                         _ => default_style.bg(Color::Indexed(236u8)),
                     };
-                    let mut bools = vec![];
-                    bools.push((idx + 1).to_string());
-                    vars.iter()
-                        .for_each(|var| bools.push(assignment[var].to_string()));
-                    bools.push(result.to_string());
-                    bools
-                        .into_iter()
-                        .map(Cell::from)
-                        .collect::<Row>()
-                        .style(row_style)
+                    row.style(row_style)
                 })
                 .collect();
 
             let table = {
+                let vars_count = result_table.vars().len();
+                let rows_count = result_table.rows.len();
+                let true_rows_count = result_table.rows.iter().filter(|r| r.1).count();
+                let false_rows_count = rows_count - true_rows_count;
                 let title = format!(
-                    " Result ({} vars, {} rows) ",
-                    result_table.vars().len(),
-                    result_table.rows.len()
+                    " Result: {vars_c} vars, {rows_c} rows ({true_c} true, {false_c} false){filter} ",
+                    vars_c = vars_count,
+                    rows_c = rows_count,
+                    true_c = true_rows_count,
+                    false_c = false_rows_count,
+                    filter = match model.proplogic_state.result_filter {
+                        Some(PropLogicResultFilter::OnlyFalse) => ", filter: only false",
+                        Some(PropLogicResultFilter::OnlyTrue) => ", filter: only true",
+                        None => "",
+                    }
                 );
                 Table::new(rows, widths)
                     .header(header)
