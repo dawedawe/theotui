@@ -133,18 +133,18 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         crate::model::PropLogicResult::Table(table) if table.rows.is_empty() => {
             panic!("should not happen")
         }
-        crate::model::PropLogicResult::Table(table) => {
+        crate::model::PropLogicResult::Table(result_table) => {
             // render formula classification
             let classification = {
                 let mut c = "".to_string();
-                if table.is_sat() {
+                if result_table.is_sat() {
                     c.push_str("φ ∈ SAT");
-                    if table.is_tautology() {
+                    if result_table.is_tautology() {
                         c.push_str(", ⊨ φ");
                     }
                 } else {
                     c.push_str("φ ∉ SAT");
-                    if table.is_contradiction() {
+                    if result_table.is_contradiction() {
                         c.push_str(", φ ⊢ ⊥");
                     }
                 }
@@ -159,10 +159,11 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(classification_paragraph, classification_rect);
 
             // render truth table
-            let vars = table.vars();
-            let widths = [Constraint::Length(10)].repeat(vars.len() + 1);
+            let vars = result_table.vars();
+            let widths = [Constraint::Length(10)].repeat(vars.len() + 2);
             let header = {
                 let mut header_names = vars.clone();
+                header_names.insert(0, "#".into());
                 header_names.push("result".to_string());
                 header_names
                     .into_iter()
@@ -171,7 +172,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                     .style(default_style)
                     .height(1)
             };
-            let rows: Vec<Row> = table
+            let rows: Vec<Row> = result_table
                 .rows
                 .iter()
                 .enumerate()
@@ -181,6 +182,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                         _ => default_style.bg(Color::Indexed(236u8)),
                     };
                     let mut bools = vec![];
+                    bools.push((idx + 1).to_string());
                     vars.iter()
                         .for_each(|var| bools.push(assignment[var].to_string()));
                     bools.push(result.to_string());
@@ -192,12 +194,19 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 })
                 .collect();
 
-            let t = Table::new(rows, widths)
-                .header(header)
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            let table = {
+                let title = format!(
+                    " Result ({} vars, {} rows) ",
+                    result_table.vars().len(),
+                    result_table.rows.len()
+                );
+                Table::new(rows, widths)
+                    .header(header)
+                    .style(default_style)
+                    .block(Block::default().borders(Borders::ALL).title(title))
+            };
             frame.render_stateful_widget(
-                t,
+                table,
                 result_rect,
                 &mut model.proplogic_state.truth_table_state,
             );
