@@ -1,6 +1,6 @@
-use crate::model::{Model, PropLogicResult, SelectedTopic, SetTheoryResult};
+use crate::model::{Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult};
 use ratatui::{
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
 use std::collections::HashMap;
@@ -9,6 +9,8 @@ use tui_input::{Input, backend::crossterm::EventHandler};
 
 pub(crate) enum PropLogicMsg {
     Eval,
+    FilterTrueRows,
+    FilterFalseRows,
     ScrollUp,
     ScrollDown,
 }
@@ -48,6 +50,16 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         (SelectedTopic::SetTheory, KeyCode::F(5)) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
         (_, KeyCode::Tab) => Some(Msg::NextTab),
         (_, KeyCode::BackTab) => Some(Msg::PrevTab),
+        (SelectedTopic::PropositionalLogic, KeyCode::Char('f'))
+            if key.modifiers.intersects(KeyModifiers::CONTROL) =>
+        {
+            Some(Msg::PropLogicMsg(PropLogicMsg::FilterFalseRows))
+        }
+        (SelectedTopic::PropositionalLogic, KeyCode::Char('t'))
+            if key.modifiers.intersects(KeyModifiers::CONTROL) =>
+        {
+            Some(Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows))
+        }
         (SelectedTopic::PropositionalLogic, _) => {
             let mut tmp_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
                 .with_cursor(model.proplogic_state.formula_input_state.cursor);
@@ -67,6 +79,24 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
     match msg {
         Msg::Exit => {
             model.running = false;
+        }
+        Msg::PropLogicMsg(PropLogicMsg::FilterFalseRows) => {
+            match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyFalse) => {
+                    model.proplogic_state.result_filter = None
+                }
+                Some(PropLogicResultFilter::OnlyTrue) | None => {
+                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyFalse)
+                }
+            }
+        }
+        Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows) => {
+            match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyTrue) => model.proplogic_state.result_filter = None,
+                Some(PropLogicResultFilter::OnlyFalse) | None => {
+                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyTrue)
+                }
+            }
         }
         Msg::PropLogicMsg(PropLogicMsg::Eval) => {
             let table = theoinf::propositional_logic::truth_table(
