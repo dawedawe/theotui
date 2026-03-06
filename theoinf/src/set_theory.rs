@@ -70,6 +70,7 @@ pub enum Expr {
     Intersection(Box<Expr>, Box<Expr>),
     Union(Box<Expr>, Box<Expr>),
     Difference(Box<Expr>, Box<Expr>),
+    CartProduct(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
     Subset(Box<Expr>, Box<Expr>),
     StrictSubset(Box<Expr>, Box<Expr>),
@@ -92,6 +93,7 @@ impl Display for Expr {
             Expr::Intersection(expr1, expr2) => write!(f, "{expr1} n {expr2}"),
             Expr::Union(expr1, expr2) => write!(f, "{expr1} u {expr2}"),
             Expr::Difference(expr1, expr2) => write!(f, "{expr1} \\ {expr2}"),
+            Expr::CartProduct(expr1, expr2) => write!(f, "{expr1} x {expr2}"),
             Expr::Paren(expr) => write!(f, "({expr})"),
             Expr::Element(set_element) => write!(f, "{set_element}"),
             Expr::Bool(b) => write!(f, "{b}"),
@@ -155,7 +157,7 @@ fn element_parser<'i>(precedence: i64) -> impl Parser<&'i str, SetElement, ErrMo
                         SetElement::Set(hash_set)
                     }
                     ), cut_err('}')),
-                _ => char_or_num_element.map(|s| {
+                _ => element.map(|s| {
                         SetElement::Elem(s.to_string())
                     }),
             },)),
@@ -226,9 +228,10 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                         _ => fail
                     },
                     dispatch! {any;
-                        'u' => Left(3, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
-                        'n' => Left(4, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
-                        '\\' => Left(2, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
+                        'u' => Left(80, |_: &mut _, a, b| Ok(Expr::Union(Box::new(a), Box::new(b)))),
+                        'n' => Left(90, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
+                        '\\' => Left(50, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
+                        'x' => Left(10, |_: &mut _, a, b| Ok(Expr::CartProduct(Box::new(a), Box::new(b)))),
                         'c' => Left(1, |_: &mut _, a, b| Ok(Expr::StrictSubset(Box::new(a), Box::new(b)))),
                         '=' => Left(1, |_: &mut _, a, b| {
                             match(a, &b) {
@@ -236,6 +239,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                 (Expr::Var(i), Expr::Union(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 (Expr::Var(i), Expr::Intersection(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 (Expr::Var(i), Expr::Difference(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
+                                (Expr::Var(i), Expr::CartProduct(_, _)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 (Expr::Var(i), Expr::Complement(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
                                 _ => Err(ErrMode::Cut(ContextError::default()))
                             }
@@ -251,12 +255,29 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     parser(0).parse_next(i)
 }
 
-fn char_or_num_element<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+fn char_or_num_element<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
     let element = (
         one_of(|c: char| c.is_alphanum()),
         take_while(0.., |c: char| c.is_alphanum() || c == '_'),
     );
-    trace("char_or_num_element", element).take().parse_next(i)
+    trace("char_or_num_element", element)
+        .take()
+        .parse_next(input)
+}
+
+fn prod_element<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+    let elemement = delimited(
+        '(',
+        (char_or_num_element, ",", char_or_num_element),
+        cut_err(')'),
+    );
+    trace("prod_element", elemement).take().parse_next(input)
+}
+
+fn element<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+    alt((char_or_num_element, prod_element))
+        .take()
+        .parse_next(input)
 }
 
 fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
@@ -344,6 +365,24 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
                     let union: HashSet<_> = set1.difference(&set2).cloned().collect();
                     Ok(Expr::SetLiteral(union))
+                }
+                _ => Err("invalid expression".to_string()),
+            }
+        }
+        Expr::CartProduct(expr1, expr2) => {
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
+            match (expr1, expr2) {
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => {
+                    let mut product = HashSet::new();
+                    for elem1 in &set1 {
+                        for elem2 in &set2 {
+                            let e = format!("({},{})", elem1, elem2);
+                            let e = SetElement::Elem(e);
+                            product.insert(e);
+                        }
+                    }
+                    Ok(Expr::SetLiteral(product))
                 }
                 _ => Err("invalid expression".to_string()),
             }
@@ -706,5 +745,23 @@ mod tests {
         let r = run("|{a,b,c}|");
         assert!(r.is_ok());
         assert_eq!(Expr::Int(3), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_cartesian_product_works() {
+        let r = run("{a,b} x {1,2}");
+        assert!(r.is_ok());
+        assert_eq!(
+            Expr::SetLiteral(
+                [
+                    "(a,1)".into(),
+                    "(a,2)".into(),
+                    "(b,1)".into(),
+                    "(b,2)".into(),
+                ]
+                .into()
+            ),
+            r.unwrap()
+        );
     }
 }
