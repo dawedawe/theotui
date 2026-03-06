@@ -40,10 +40,17 @@ pub(crate) enum PropLogicResult {
     Table(theoinf::propositional_logic::TruthTable),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum PropLogicResultFilter {
+    OnlyFalse,
+    OnlyTrue,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct PropositionalLogicModel {
     pub(crate) formula_input_state: InputState,
     pub(crate) result: PropLogicResult,
+    pub(crate) result_filter: Option<PropLogicResultFilter>,
     pub(crate) truth_table_state: TableState,
     pub(crate) truth_table_scroll_state: ScrollbarState,
 }
