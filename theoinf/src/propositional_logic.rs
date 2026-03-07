@@ -28,6 +28,7 @@ pub enum Expr {
     Not(Box<Expr>),
     And(Box<Expr>, Box<Expr>),
     Or(Box<Expr>, Box<Expr>),
+    Xor(Box<Expr>, Box<Expr>),
     Equi(Box<Expr>, Box<Expr>),
     Impl(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
@@ -40,7 +41,11 @@ impl Expr {
             match expr {
                 Expr::Var(a) => vars.push(a.into()),
                 Expr::Not(expr) => helper(expr, vars),
-                Expr::And(a, b) | Expr::Or(a, b) | Expr::Equi(a, b) | Expr::Impl(a, b) => {
+                Expr::And(a, b)
+                | Expr::Or(a, b)
+                | Expr::Xor(a, b)
+                | Expr::Equi(a, b)
+                | Expr::Impl(a, b) => {
                     let a_vars = a.collect_vars();
                     a_vars.into_iter().for_each(|v| vars.push(v));
                     let b_vars = b.collect_vars();
@@ -93,16 +98,17 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             .infix(
                 alt((
                     dispatch! {any;
-                        '&' => Left(4, |_: &mut _, a, b| Ok(Expr::And(Box::new(a), Box::new(b)))),
-                        '|' => Left(3, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
+                        '&' => Left(80, |_: &mut _, a, b| Ok(Expr::And(Box::new(a), Box::new(b)))),
+                        '^' => Left(70, |_: &mut _, a, b| Ok(Expr::Xor(Box::new(a), Box::new(b)))),
+                        '|' => Left(60, |_: &mut _, a, b| Ok(Expr::Or(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                     dispatch! {take(3usize);
-                        "<=>" =>  Left(1, |_: &mut _, a, b| Ok(Expr::Equi(Box::new(a), Box::new(b)))),
+                        "<=>" =>  Left(10, |_: &mut _, a, b| Ok(Expr::Equi(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                     dispatch! {take(2usize);
-                        "->" =>  Left(2, |_: &mut _, a, b| Ok(Expr::Impl(Box::new(a), Box::new(b)))),
+                        "->" =>  Left(20, |_: &mut _, a, b| Ok(Expr::Impl(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                 )),
@@ -139,9 +145,10 @@ pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
         Expr::Var(a) => assignment[a.as_str()],
         Expr::Not(a) => !eval(assignment, a),
         Expr::Or(a, b) => eval(assignment, a) || eval(assignment, b),
+        Expr::Xor(a, b) => eval(assignment, a) ^ eval(assignment, b),
         Expr::And(a, b) => eval(assignment, a) && eval(assignment, b),
         Expr::Equi(a, b) => eval(assignment, a) == eval(assignment, b),
-        Expr::Impl(a, b) => !eval(assignment, a) || eval(assignment, b), // a -> b <=> !a v b
+        Expr::Impl(a, b) => !eval(assignment, a) || eval(assignment, b),
         Expr::True => true,
         Expr::False => false,
         Expr::Paren(a) => eval(assignment, a),
@@ -395,6 +402,11 @@ mod tests {
         assert!(run("false -> true", &assignment).unwrap());
         assert!(!run("true -> false", &assignment).unwrap());
         assert!(run("true -> true", &assignment).unwrap());
+
+        assert!(!run("false ^ false", &assignment).unwrap());
+        assert!(run("false ^ true", &assignment).unwrap());
+        assert!(run("true ^ false", &assignment).unwrap());
+        assert!(!run("true ^ true", &assignment).unwrap());
     }
 
     #[test]
