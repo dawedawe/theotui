@@ -26,10 +26,10 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
 
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .margin(2)
+        .margin(1)
         .constraints(
             [
-                Constraint::Length(50), // tabs input
+                Constraint::Length(25), // tabs input
                 Constraint::Min(1),     // tab content
             ]
             .as_ref(),
@@ -250,9 +250,8 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .margin(2)
         .constraints(
             [
-                Constraint::Length(7),  // term input
-                Constraint::Length(20), // result
-                Constraint::Min(1),
+                Constraint::Min(3),    // term input
+                Constraint::Length(3), // result
                 Constraint::Length(1),
             ]
             .as_ref(),
