@@ -9,6 +9,7 @@ use winnow::combinator::alt;
 use winnow::combinator::cut_err;
 use winnow::combinator::delimited;
 use winnow::combinator::dispatch;
+use winnow::combinator::eof;
 use winnow::combinator::expression;
 use winnow::combinator::fail;
 use winnow::combinator::opt;
@@ -252,7 +253,16 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
         }
     }
 
-    parser(0).parse_next(i)
+    match parser(0).parse_next(i) {
+        Ok(r) => {
+            if eof::<&str, ErrMode<ContextError>>.parse_next(i).is_ok() {
+                Ok(r)
+            } else {
+                Err(ErrMode::Cut(ContextError::default()))
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
 fn char_or_num_element<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
@@ -452,6 +462,13 @@ mod tests {
         assert!(expr.is_ok());
         assert_eq!(Expr::Var("a".into()), expr.unwrap());
         assert_eq!("", input);
+    }
+
+    #[test]
+    fn parsing_a_dangling_var_should_fail() {
+        let mut input = "a b";
+        let expr = pratt_parser(&mut input);
+        assert!(expr.is_err());
     }
 
     #[test]

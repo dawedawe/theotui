@@ -7,6 +7,7 @@ use winnow::combinator::alt;
 use winnow::combinator::cut_err;
 use winnow::combinator::delimited;
 use winnow::combinator::dispatch;
+use winnow::combinator::eof;
 use winnow::combinator::expression;
 use winnow::combinator::fail;
 use winnow::combinator::peek;
@@ -66,9 +67,9 @@ impl Expr {
     }
 }
 
-pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
+pub fn pratt_parser(input: &mut &str) -> ModalResult<Expr> {
     fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
-        move |i: &mut &str| {
+        move |input: &mut &str| {
             use Infix::Left;
             expression(
                 delimited(
@@ -113,14 +114,23 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                     },
                 )),
             )
-            .parse_next(i)
+            .parse_next(input)
         }
     }
 
-    parser(0).parse_next(i)
+    match parser(0).parse_next(input) {
+        Ok(r) => {
+            if eof::<&str, ErrMode<ContextError>>.parse_next(input).is_ok() {
+                Ok(r)
+            } else {
+                Err(ErrMode::Cut(ContextError::default()))
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
-fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+fn identifier<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
     trace(
         "identifier",
         (
@@ -129,15 +139,15 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
         ),
     )
     .take()
-    .parse_next(i)
+    .parse_next(input)
 }
 
-fn false_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    trace("false_lit", "false").take().parse_next(i)
+fn false_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+    trace("false_lit", "false").take().parse_next(input)
 }
 
-fn true_lit<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
-    trace("true_lit", "true").take().parse_next(i)
+fn true_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+    trace("true_lit", "true").take().parse_next(input)
 }
 
 pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
@@ -272,6 +282,13 @@ mod tests {
         assert!(expr.is_ok());
         assert_eq!(Expr::Var("a".to_string()), expr.unwrap());
         assert_eq!("", input);
+    }
+
+    #[test]
+    fn parsing_a_dangling_var_should_fail() {
+        let mut input = "a b";
+        let expr = pratt_parser(&mut input);
+        assert!(expr.is_err());
     }
 
     #[test]
