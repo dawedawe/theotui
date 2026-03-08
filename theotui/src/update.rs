@@ -38,7 +38,8 @@ pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>>
 fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     match (model.selected_topic, key.code) {
         (_, KeyCode::Esc) => Some(Msg::Exit),
-        (SelectedTopic::PropositionalLogic, KeyCode::Enter) => {
+        (SelectedTopic::PropositionalLogic, KeyCode::Enter)
+        | (SelectedTopic::PropositionalLogic, KeyCode::F(5)) => {
             Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
         }
         (SelectedTopic::PropositionalLogic, KeyCode::Up) => {
