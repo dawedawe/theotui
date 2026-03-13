@@ -26,6 +26,7 @@ use winnow::token::take_while;
 
 const UNI_IDENT: &str = "UNI";
 
+/// Syntactical elements of a set.
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum SetElement {
     Elem(String),
@@ -61,6 +62,7 @@ impl Display for SetElement {
     }
 }
 
+/// Expressions of the set theory language.
 #[derive(PartialEq, Debug, Clone, Eq)]
 pub enum Expr {
     Var(String),
@@ -175,6 +177,7 @@ fn element_parser<'i>(precedence: i64) -> impl Parser<&'i str, SetElement, ErrMo
     }
 }
 
+/// Parse the input to an [Expr].
 pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
     fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
         move |i: &mut &str| -> Result<Expr, ErrMode<ContextError>> {
@@ -298,8 +301,10 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
     trace("identifier", identifier).take().parse_next(i)
 }
 
-type Assignment = HashMap<String, Expr>;
+/// Assign [Expr] values to vars.
+pub type Assignment = HashMap<String, Expr>;
 
+/// Evaluate the given [Expr] using the given [Assignment].
 pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
     match expr {
         Expr::Element(_) => Ok(expr.clone()),
@@ -433,8 +438,9 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
     }
 }
 
-pub fn run(formula: &str) -> Result<Expr, String> {
-    let lines = formula.trim().lines();
+/// Parse and evaluate the given term.
+pub fn run(term: &str) -> Result<Expr, String> {
+    let lines = term.trim().lines();
     let mut a = HashMap::new();
     let results: Vec<_> = lines
         .into_iter()

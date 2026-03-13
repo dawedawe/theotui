@@ -21,6 +21,7 @@ use winnow::token::one_of;
 use winnow::token::take;
 use winnow::token::take_while;
 
+/// Expressions of the propositional logic language.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Expr {
     True,
@@ -67,6 +68,7 @@ impl Expr {
     }
 }
 
+/// Parse the input to an [Expr].
 pub fn pratt_parser(input: &mut &str) -> ModalResult<Expr> {
     fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
         move |input: &mut &str| {
@@ -150,6 +152,7 @@ fn true_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
     trace("true_lit", "true").take().parse_next(input)
 }
 
+/// Evaluate the given [Expr] using the given [Assignment].
 pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
     match expr {
         Expr::Var(a) => assignment[a.as_str()],
@@ -165,6 +168,7 @@ pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
     }
 }
 
+/// Parse and evaluate the given formula using the given [Assignment].
 pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
     let input = formula.to_string();
     match pratt_parser(&mut input.as_str()) {
@@ -173,8 +177,10 @@ pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
     }
 }
 
+/// Assign boolean values to vars.
 pub type Assignment = HashMap<String, bool>;
 
+/// Truth table containing assignments and their result.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TruthTable {
     pub rows: Vec<(Assignment, bool)>,
@@ -210,6 +216,7 @@ impl Default for TruthTable {
     }
 }
 
+/// Construct all possible [Assignment]s for the given vars.
 pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
     let mut vars = vars.clone();
     vars.sort();
@@ -229,6 +236,7 @@ pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
     assignments
 }
 
+/// Construct the [TruthTable] for all possible assignments for the given formula.
 pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
     let input = formula.to_string();
     match pratt_parser(&mut input.as_str()) {
@@ -245,21 +253,6 @@ pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
         }
         ModalResult::Err(_) => std::result::Result::Err("parse error".to_string()),
     }
-}
-
-pub fn print_assignment(assignment: &Assignment) {
-    let mut keys: Vec<&String> = assignment.keys().collect();
-    keys.sort();
-    for k in keys {
-        print!("{} = {} ", k, assignment[k])
-    }
-}
-
-pub fn print_truth_table(table: &TruthTable) {
-    table.rows.iter().for_each(|(a, r)| {
-        print_assignment(a);
-        println!(" => {r}");
-    });
 }
 
 #[cfg(test)]
