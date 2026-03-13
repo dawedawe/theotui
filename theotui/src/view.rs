@@ -2,7 +2,8 @@ use crate::model::{Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
         ScrollbarState, Table,
@@ -29,15 +30,15 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         .margin(1)
         .constraints(
             [
-                Constraint::Length(25), // tabs input
-                Constraint::Min(1),     // tab content
+                Constraint::Length(25), // topic selection
+                Constraint::Min(1),     // topic content
             ]
             .as_ref(),
         )
         .split(frame.area());
 
-    let tabs_rect = chunks[0];
-    let tab_content_rect = chunks[1];
+    let topics_rect = chunks[0];
+    let topics_content_rect = chunks[1];
 
     // render topic list
     let items = SelectedTopic::iter().map(|t| t.to_string());
@@ -50,12 +51,79 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         .highlight_spacing(ratatui::widgets::HighlightSpacing::Always);
     let mut topic_list_state = ListState::default().with_selected(Some(selected_tab_index));
 
-    frame.render_stateful_widget(topic_list, tabs_rect, &mut topic_list_state);
+    frame.render_stateful_widget(topic_list, topics_rect, &mut topic_list_state);
 
     match model.selected_topic {
-        SelectedTopic::PropositionalLogic => render_proplogic(frame, tab_content_rect, model),
-        SelectedTopic::SetTheory => render_settheory(frame, tab_content_rect, model),
+        SelectedTopic::SetTheory => render_settheory(frame, topics_content_rect, model),
+        SelectedTopic::PropositionalLogic => render_proplogic(frame, topics_content_rect, model),
     }
+}
+
+fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    let default_style = default_style();
+
+    let tab_content_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints(
+            [
+                Constraint::Min(3),    // term input
+                Constraint::Length(3), // result
+                Constraint::Length(1), // key bindings
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let term_rect = tab_content_chunks[0];
+    let result_rect = tab_content_chunks[1];
+    let key_bindings_rect = tab_content_chunks[2];
+
+    let editor_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Term ")
+        .style(default_style);
+
+    frame.render_widget(editor_block, term_rect);
+    let editor_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(term_rect);
+    model
+        .settheory_state
+        .term_textarea
+        .set_cursor_line_style(default_style);
+    frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
+
+    // render eval result
+    match &model.settheory_state.result {
+        &crate::model::SetTheoryResult::None => (),
+        crate::model::SetTheoryResult::Error(e) => {
+            let result_paragraph = Paragraph::new(e.clone())
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            frame.render_widget(result_paragraph, result_rect);
+        }
+        crate::model::SetTheoryResult::Expr(eval_result) => {
+            let result_paragraph = Paragraph::new(eval_result.to_string())
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            frame.render_widget(result_paragraph, result_rect);
+        }
+    }
+
+    // render key bindings
+    let msg = vec![
+        Span::raw("Next topic: "),
+        Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Evaluate: "),
+        Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Exit: "),
+        Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
+    ];
+    let text = Text::from(Line::from(msg)).style(default_style);
+    let help_message = Paragraph::new(text);
+    frame.render_widget(help_message, key_bindings_rect);
 }
 
 fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
@@ -66,19 +134,19 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .margin(2)
         .constraints(
             [
-                Constraint::Length(3),  // formula input
-                Constraint::Length(3),  // classification
-                Constraint::Length(20), // result / truth table
-                Constraint::Min(1),
-                Constraint::Length(1),
+                Constraint::Length(3), // formula input
+                Constraint::Length(3), // classification
+                Constraint::Min(10),   // result / truth table
+                Constraint::Length(1), // key bindings
             ]
             .as_ref(),
         )
         .split(rect);
 
-    let formula_rect = center_horizontal(tab_content_chunks[0], 100);
-    let classification_rect = center_horizontal(tab_content_chunks[1], 100);
-    let result_rect = center_horizontal(tab_content_chunks[2], 100);
+    let formula_rect = tab_content_chunks[0];
+    let classification_rect = tab_content_chunks[1];
+    let result_rect = tab_content_chunks[2];
+    let key_bindings_rect = tab_content_chunks[3];
 
     // render formula input
     let formula_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
@@ -240,59 +308,23 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             );
         }
     };
-}
 
-fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
-    let default_style = default_style();
-
-    let tab_content_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints(
-            [
-                Constraint::Min(3),    // term input
-                Constraint::Length(3), // result
-                Constraint::Length(1),
-            ]
-            .as_ref(),
-        )
-        .split(rect);
-
-    let term_rect = center_horizontal(tab_content_chunks[0], 100);
-    let result_rect = center_horizontal(tab_content_chunks[1], 100);
-
-    let editor_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Term ")
-        .style(default_style);
-
-    frame.render_widget(editor_block, term_rect);
-    let editor_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(term_rect);
-    model
-        .settheory_state
-        .term_textarea
-        .set_cursor_line_style(default_style);
-    frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
-
-    // render eval result
-    match &model.settheory_state.result {
-        &crate::model::SetTheoryResult::None => (),
-        crate::model::SetTheoryResult::Error(e) => {
-            let result_paragraph = Paragraph::new(e.clone())
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" Result "));
-            frame.render_widget(result_paragraph, result_rect);
-        }
-        crate::model::SetTheoryResult::Expr(eval_result) => {
-            let result_paragraph = Paragraph::new(eval_result.to_string())
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" Result "));
-            frame.render_widget(result_paragraph, result_rect);
-        }
-    }
+    // render key bindings
+    let msg = vec![
+        Span::raw("Next topic: "),
+        Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Evaluate: "),
+        Span::styled("F5,Enter | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Filter true: "),
+        Span::styled("Ctrl-t | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Filter false: "),
+        Span::styled("Ctrl-f | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Exit: "),
+        Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
+    ];
+    let text = Text::from(Line::from(msg)).style(default_style);
+    let help_message = Paragraph::new(text);
+    frame.render_widget(help_message, key_bindings_rect);
 }
 
 fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarState) {
