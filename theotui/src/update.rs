@@ -102,6 +102,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             }
         }
         Msg::PropLogicMsg(PropLogicMsg::Eval) => {
+            model.proplogic_state.result_filter = None;
             let table = theoinf::propositional_logic::truth_table(
                 model.proplogic_state.formula_input_state.value.as_str(),
             );
