@@ -11,10 +11,10 @@ pub(crate) struct InputState {
 #[derive(Debug, Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount)]
 pub(crate) enum SelectedTopic {
     #[default]
-    #[strum(to_string = "Propositional Logic")]
-    PropositionalLogic,
     #[strum(to_string = "Set Theory")]
     SetTheory,
+    #[strum(to_string = "Propositional Logic")]
+    PropositionalLogic,
 }
 
 impl SelectedTopic {
