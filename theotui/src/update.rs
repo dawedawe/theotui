@@ -25,6 +25,7 @@ pub(crate) enum Msg {
     PrevTab,
     PropLogicMsg(PropLogicMsg),
     SetTheoryMsg(SetTheoryMsg),
+    ToggleHelp,
 }
 
 pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>> {
@@ -38,6 +39,7 @@ pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>>
 fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     match (model.selected_topic, key.code) {
         (_, KeyCode::Esc) => Some(Msg::Exit),
+        (_, KeyCode::F(1)) => Some(Msg::ToggleHelp),
         (SelectedTopic::PropositionalLogic, KeyCode::Enter)
         | (SelectedTopic::PropositionalLogic, KeyCode::F(5)) => {
             Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
@@ -172,5 +174,6 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         }
         Msg::NextTab => model.selected_topic = model.selected_topic.next(),
         Msg::PrevTab => model.selected_topic = model.selected_topic.previous(),
+        Msg::ToggleHelp => model.show_help = !model.show_help,
     }
 }
