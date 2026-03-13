@@ -75,6 +75,7 @@ pub(crate) struct Model<'a> {
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) proplogic_state: PropositionalLogicModel,
     pub(crate) settheory_state: SetTheoryModel<'a>,
+    pub(crate) show_help: bool,
 }
 
 impl<'a> Default for Model<'a> {
@@ -84,6 +85,7 @@ impl<'a> Default for Model<'a> {
             selected_topic: SelectedTopic::default(),
             proplogic_state: Default::default(),
             settheory_state: Default::default(),
+            show_help: Default::default(),
         }
     }
 }
