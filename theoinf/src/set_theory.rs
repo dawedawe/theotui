@@ -443,17 +443,33 @@ pub fn run(formula: &str) -> Result<Expr, String> {
             Err(e) => Result::Err(e.to_string()),
         })
         .collect();
-    let (oks, errs): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| (r).is_ok());
-    if errs.is_empty() {
-        oks.into_iter().last().unwrap()
+    if results.is_empty() {
+        Result::Err("no input given".into())
     } else {
-        errs.into_iter().next().unwrap()
+        let (oks, errs): (Vec<_>, Vec<_>) = results.into_iter().partition(|r| (r).is_ok());
+        if errs.is_empty() {
+            oks.into_iter().last().unwrap()
+        } else {
+            errs.into_iter().next().unwrap()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parsing_empty_input_errors() {
+        let expr = pratt_parser(&mut "");
+        assert!(expr.is_err());
+    }
+
+    #[test]
+    fn running_empty_input_errors() {
+        let r = run("");
+        assert!(r.is_err());
+    }
 
     #[test]
     fn parsing_an_identifier_works() {
