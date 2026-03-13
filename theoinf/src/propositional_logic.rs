@@ -267,6 +267,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parsing_empty_input_errors() {
+        let expr = pratt_parser(&mut "");
+        assert!(expr.is_err());
+    }
+
+    #[test]
+    fn running_empty_input_errors() {
+        let r = run("", &HashMap::new());
+        assert!(r.is_err());
+    }
+
+    #[test]
     fn parsing_a_bool_literal_works() {
         let mut input = "true";
         let expr = pratt_parser(&mut input);
@@ -428,8 +440,7 @@ mod tests {
 
     #[test]
     fn precedence_works() {
-        let assignment = HashMap::new();
-        assert!(run("true | false & false", &assignment).unwrap());
+        assert!(run("true | false & false", &HashMap::new()).unwrap());
     }
 
     #[test]
