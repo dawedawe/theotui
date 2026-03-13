@@ -1,7 +1,7 @@
 use crate::model::{Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Flex, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{
@@ -11,13 +11,6 @@ use ratatui::{
 };
 use strum::IntoEnumIterator;
 use tui_input::Input;
-
-fn center_horizontal(area: Rect, width: u16) -> Rect {
-    let [area] = Layout::horizontal([Constraint::Length(width)])
-        .flex(Flex::Center)
-        .areas(area);
-    area
-}
 
 fn default_style() -> Style {
     Style::default().fg(Color::Green)
@@ -62,22 +55,42 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
 fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let default_style = default_style();
 
-    let tab_content_chunks = Layout::default()
+    let main_vert_split = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints(
             [
-                Constraint::Min(3),    // term input
-                Constraint::Length(3), // result
+                Constraint::Min(1),    // term, result
                 Constraint::Length(1), // key bindings
             ]
             .as_ref(),
         )
         .split(rect);
 
-    let term_rect = tab_content_chunks[0];
-    let result_rect = tab_content_chunks[1];
-    let key_bindings_rect = tab_content_chunks[2];
+    let key_bindings_rect = main_vert_split[1];
+    let (non_help_rect, help_rect) = if model.show_help {
+        let halfs = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(main_vert_split[0]);
+        (halfs[0], halfs[1])
+    } else {
+        (main_vert_split[0], Rect::default())
+    };
+
+    let sub_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(3),    // term input
+                Constraint::Length(3), // result
+            ]
+            .as_ref(),
+        )
+        .split(non_help_rect);
+
+    let term_rect = sub_vert_split[0];
+    let result_rect = sub_vert_split[1];
 
     let editor_block = Block::default()
         .borders(Borders::ALL)
@@ -112,6 +125,24 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
         }
     }
 
+    // render help if toggled
+    if model.show_help {
+        let help = "A = {1,2,3}       // declare a set
+UNI = {1,2,3,4,5} // declare the UNIVERSE set
+A u B             // union
+A n B             // intersection
+A \\ B             // difference
+A x B             // cartesian product
+A c B             // strict subset
+A c= B            // subset
+!A                // complement, needs UNI
+|A|               // cardinality";
+        let help_paragraph = Paragraph::new(help)
+            .style(default_style)
+            .block(Block::default().borders(Borders::ALL).title(" Help "));
+        frame.render_widget(help_paragraph, help_rect);
+    }
+
     // render key bindings
     let msg = vec![
         Span::raw("Next topic: "),
@@ -129,24 +160,44 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
 fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let default_style = default_style();
 
-    let tab_content_chunks = Layout::default()
+    let main_vert_split = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints(
             [
-                Constraint::Length(3), // formula input
-                Constraint::Length(3), // classification
-                Constraint::Min(10),   // result / truth table
+                Constraint::Min(1),    // formula, classification, result, help
                 Constraint::Length(1), // key bindings
             ]
             .as_ref(),
         )
         .split(rect);
 
-    let formula_rect = tab_content_chunks[0];
-    let classification_rect = tab_content_chunks[1];
-    let result_rect = tab_content_chunks[2];
-    let key_bindings_rect = tab_content_chunks[3];
+    let key_bindings_rect = main_vert_split[1];
+    let (non_help_rect, help_rect) = if model.show_help {
+        let halfs = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(main_vert_split[0]);
+        (halfs[0], halfs[1])
+    } else {
+        (main_vert_split[0], Rect::default())
+    };
+
+    let sub_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(3), // formula input
+                Constraint::Length(3), // classification
+                Constraint::Min(10),   // result / truth table
+            ]
+            .as_ref(),
+        )
+        .split(non_help_rect);
+
+    let formula_rect = sub_vert_split[0];
+    let classification_rect = sub_vert_split[1];
+    let result_rect = sub_vert_split[2];
 
     // render formula input
     let formula_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
@@ -308,6 +359,23 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             );
         }
     };
+
+    // render help if toggled
+    if model.show_help {
+        let help = "true    // boolean literal true
+false   // boolean literal false
+p       // a propositional variable
+!p      // not, negation
+p & q   // and, conjunction
+p | q   // or, disjunction
+p ^ q   // exclusive or
+p <=> q // equivalence
+p -> q  // implication";
+        let help_paragraph = Paragraph::new(help)
+            .style(default_style)
+            .block(Block::default().borders(Borders::ALL).title(" Help "));
+        frame.render_widget(help_paragraph, help_rect);
+    }
 
     // render key bindings
     let msg = vec![
