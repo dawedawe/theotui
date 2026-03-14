@@ -150,6 +150,8 @@ A == B            // equality
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
         Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Help: "),
+        Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Exit: "),
         Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
     ];
@@ -388,6 +390,8 @@ p -> q  // implication";
         Span::styled("Ctrl-t | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Filter false: "),
         Span::styled("Ctrl-f | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Help: "),
+        Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Exit: "),
         Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
     ];
