@@ -78,6 +78,7 @@ pub enum Expr {
     Subset(Box<Expr>, Box<Expr>),
     StrictSubset(Box<Expr>, Box<Expr>),
     Cardinality(Box<Expr>),
+    Equality(Box<Expr>, Box<Expr>),
     Bool(bool),
     Int(usize),
 }
@@ -104,6 +105,7 @@ impl Display for Expr {
             Expr::StrictSubset(expr1, expr2) => write!(f, "{expr1} ⊂ {expr2}"),
             Expr::Cardinality(expr) => write!(f, "|{expr}|"),
             Expr::Int(i) => write!(f, "{i}"),
+            Expr::Equality(expr1, expr2) => write!(f, "{expr1} == {expr2}"),
         }
     }
 }
@@ -228,7 +230,8 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
             .infix(
                 alt((
                     dispatch! {take(2usize);
-                        "c=" =>  Left(1, |_: &mut _, a, b| Ok(Expr::Subset(Box::new(a), Box::new(b)))),
+                        "c=" =>  Left(5, |_: &mut _, a, b| Ok(Expr::Subset(Box::new(a), Box::new(b)))),
+                        "==" =>  Left(1, |_: &mut _, a, b| Ok(Expr::Equality(Box::new(a), Box::new(b)))),
                         _ => fail
                     },
                     dispatch! {any;
@@ -236,7 +239,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                         'n' => Left(90, |_: &mut _, a, b| Ok(Expr::Intersection(Box::new(a), Box::new(b)))),
                         '\\' => Left(50, |_: &mut _, a, b| Ok(Expr::Difference(Box::new(a), Box::new(b)))),
                         'x' => Left(10, |_: &mut _, a, b| Ok(Expr::CartProduct(Box::new(a), Box::new(b)))),
-                        'c' => Left(1, |_: &mut _, a, b| Ok(Expr::StrictSubset(Box::new(a), Box::new(b)))),
+                        'c' => Left(5, |_: &mut _, a, b| Ok(Expr::StrictSubset(Box::new(a), Box::new(b)))),
                         '=' => Left(1, |_: &mut _, a, b| {
                             match(a, &b) {
                                 (Expr::Var(i), Expr::SetLiteral(_)) => Ok(Expr::SetDecl(i, Box::new(b))),
@@ -423,6 +426,16 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
                     let is_strict_subset = is_subset && is_unequal;
                     Ok(Expr::Bool(is_strict_subset))
                 }
+                _ => Err("invalid expression".to_string()),
+            }
+        }
+        Expr::Equality(expr1, expr2) => {
+            let expr1 = eval(assignment, expr1)?;
+            let expr2 = eval(assignment, expr2)?;
+            match (expr1, expr2) {
+                (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => Ok(Expr::Bool(set1 == set2)),
+                (Expr::Int(i1), Expr::Int(i2)) => Ok(Expr::Bool(i1 == i2)),
+                (Expr::Bool(b1), Expr::Bool(b2)) => Ok(Expr::Bool(b1 == b2)),
                 _ => Err("invalid expression".to_string()),
             }
         }
@@ -802,5 +815,39 @@ mod tests {
             ),
             r.unwrap()
         );
+    }
+
+    #[test]
+    fn evaluation_of_equals_with_unequal_sets_works() {
+        let r = run("{a,b} == {1,2}");
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(false), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_equals_with_equal_sets_works() {
+        let term = "UNI = {1,2,3,4}
+L1 = {1,2,3}
+L2 = {3,4}
+L1 \\ L2 == L1 n !L2";
+        let r = run(term);
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_equals_with_ints_works() {
+        let term = "|{a,b,c}| == |{1,2,3}|";
+        let r = run(term);
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_equals_with_bools_works() {
+        let term = "{a,b} c {a,b,c} == {1,2,3} c= {1,2,3}";
+        let r = run(term);
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
     }
 }
