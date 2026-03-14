@@ -135,6 +135,7 @@ A \\ B             // difference
 A x B             // cartesian product
 A c B             // strict subset
 A c= B            // subset
+A == B            // equality
 !A                // complement, needs UNI
 |A|               // cardinality";
         let help_paragraph = Paragraph::new(help)
