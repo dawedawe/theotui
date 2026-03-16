@@ -57,7 +57,6 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     let main_vert_split = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
         .constraints(
             [
                 Constraint::Min(1),    // term, result
@@ -165,7 +164,6 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     let main_vert_split = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
         .constraints(
             [
                 Constraint::Min(1),    // formula, classification, result, help
@@ -390,6 +388,8 @@ p -> q  // implication";
         Span::styled("Ctrl-t | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Filter false: "),
         Span::styled("Ctrl-f | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Scroll: "),
+        Span::styled("↑/↓ | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Help: "),
         Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Exit: "),
