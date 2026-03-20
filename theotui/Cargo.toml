@@ -4,7 +4,7 @@ version = "0.1.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
-description = "A crate implementing a TUI for theoretical computer science stuff."
+description = "A TUI to explore theoretical computer science topics."
 
 [dependencies]
 theoinf = { path = "../theoinf", version = "0.1.0"}
