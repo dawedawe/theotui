@@ -15,7 +15,7 @@ All the usual operations of naive set theory are implemented.
 Press `F1` to toggle the help next to the editor.  
 Press `F5` to let your terms be evaluated.
 
-![set_theory.png](./images/set_theory.png)
+![set_theory.png](./theotui/images/set_theory.png)
 
 ## propositional logic
 
@@ -24,6 +24,6 @@ Press `F1` to toggle the help next to the editor.
 Press `F5` or `Enter` to let your formula be evaluated.  
 The truth table can be filtered with `Ctrl-t`/`Ctrl-f` to only show the assignments resulting in true or false.
 
-![propositional_logic.png](./images/propositional_logic.png)
+![propositional_logic.png](./theotui/images/propositional_logic.png)
 
 
