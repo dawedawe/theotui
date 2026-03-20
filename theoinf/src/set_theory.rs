@@ -80,7 +80,7 @@ pub enum Expr {
     Cardinality(Box<Expr>),
     Equality(Box<Expr>, Box<Expr>),
     Bool(bool),
-    Int(usize),
+    Size(usize),
 }
 
 impl Display for Expr {
@@ -104,7 +104,7 @@ impl Display for Expr {
             Expr::Subset(expr1, expr2) => write!(f, "{expr1} ⊆ {expr2}"),
             Expr::StrictSubset(expr1, expr2) => write!(f, "{expr1} ⊂ {expr2}"),
             Expr::Cardinality(expr) => write!(f, "|{expr}|"),
-            Expr::Int(i) => write!(f, "{i}"),
+            Expr::Size(i) => write!(f, "{i}"),
             Expr::Equality(expr1, expr2) => write!(f, "{expr1} == {expr2}"),
         }
     }
@@ -210,7 +210,10 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
                                     Expr::SetLiteral(hash_set)
                                 }
                                 ), cut_err('}')),
-                            _ => identifier.map(|s| Expr::Var(s.to_string())),
+                            _  => alt((
+                                    size_literal.map(|s| Expr::Size(s.parse::<usize>().unwrap())),
+                                    identifier.map(|s| Expr::Var(s.to_string()))
+                                  ))
                         },
                     )),
                     multispace0,
@@ -302,6 +305,11 @@ fn identifier<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
         take_while(0.., |c: char| c.is_alphanum() || c == '_'),
     );
     trace("identifier", identifier).take().parse_next(i)
+}
+
+fn size_literal<'i>(i: &mut &'i str) -> ModalResult<&'i str> {
+    let number = take_while(1.., |c: char| c.is_numeric());
+    trace("size_literal", number).take().parse_next(i)
 }
 
 /// Assign [Expr] values to vars.
@@ -434,7 +442,7 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
             let expr2 = eval(assignment, expr2)?;
             match (expr1, expr2) {
                 (Expr::SetLiteral(set1), Expr::SetLiteral(set2)) => Ok(Expr::Bool(set1 == set2)),
-                (Expr::Int(i1), Expr::Int(i2)) => Ok(Expr::Bool(i1 == i2)),
+                (Expr::Size(i1), Expr::Size(i2)) => Ok(Expr::Bool(i1 == i2)),
                 (Expr::Bool(b1), Expr::Bool(b2)) => Ok(Expr::Bool(b1 == b2)),
                 _ => Err("invalid expression".to_string()),
             }
@@ -443,11 +451,11 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
         Expr::Cardinality(expr) => {
             let expr = eval(assignment, expr)?;
             match expr {
-                Expr::SetLiteral(set) => Ok(Expr::Int(set.len())),
+                Expr::SetLiteral(set) => Ok(Expr::Size(set.len())),
                 _ => Err("invalid expression".to_string()),
             }
         }
-        Expr::Int(_) => Ok(expr.clone()),
+        Expr::Size(_) => Ok(expr.clone()),
     }
 }
 
@@ -796,7 +804,7 @@ mod tests {
     fn evaluation_of_cardinality_works() {
         let r = run("|{a,b,c}|");
         assert!(r.is_ok());
-        assert_eq!(Expr::Int(3), r.unwrap());
+        assert_eq!(Expr::Size(3), r.unwrap());
     }
 
     #[test]
@@ -836,7 +844,7 @@ L1 \\ L2 == L1 n !L2";
     }
 
     #[test]
-    fn evaluation_of_equals_with_ints_works() {
+    fn evaluation_of_equals_with_sizes_works() {
         let term = "|{a,b,c}| == |{1,2,3}|";
         let r = run(term);
         assert!(r.is_ok());
@@ -846,6 +854,14 @@ L1 \\ L2 == L1 n !L2";
     #[test]
     fn evaluation_of_equals_with_bools_works() {
         let term = "{a,b} c {a,b,c} == {1,2,3} c= {1,2,3}";
+        let r = run(term);
+        assert!(r.is_ok());
+        assert_eq!(Expr::Bool(true), r.unwrap());
+    }
+
+    #[test]
+    fn evaluation_of_equals_with_size_literals_works() {
+        let term = "|{a,b}| == 2";
         let r = run(term);
         assert!(r.is_ok());
         assert_eq!(Expr::Bool(true), r.unwrap());
