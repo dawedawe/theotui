@@ -15,6 +15,8 @@ pub(crate) enum SelectedTopic {
     SetTheory,
     #[strum(to_string = "Propositional Logic")]
     PropositionalLogic,
+    #[strum(to_string = "DFA")]
+    Dfa,
 }
 
 impl SelectedTopic {
@@ -69,12 +71,23 @@ pub(crate) struct SetTheoryModel<'a> {
     pub(crate) result: SetTheoryResult,
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct DfaModel<'a> {
+    pub(crate) alphabet_textarea: TextArea<'a>,
+    pub(crate) states_textarea: TextArea<'a>,
+    pub(crate) start_state_textarea: TextArea<'a>,
+    pub(crate) finish_states_textarea: TextArea<'a>,
+    pub(crate) transitions_textarea: TextArea<'a>,
+    pub(crate) result: Option<bool>,
+}
+
 #[derive(Debug)]
 pub(crate) struct Model<'a> {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) proplogic_state: PropositionalLogicModel,
     pub(crate) settheory_state: SetTheoryModel<'a>,
+    pub(crate) dfa_state: DfaModel<'a>,
     pub(crate) show_help: bool,
 }
 
@@ -85,6 +98,7 @@ impl<'a> Default for Model<'a> {
             selected_topic: SelectedTopic::default(),
             proplogic_state: Default::default(),
             settheory_state: Default::default(),
+            dfa_state: Default::default(),
             show_help: Default::default(),
         }
     }
