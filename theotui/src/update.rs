@@ -75,6 +75,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             model.settheory_state.term_textarea.input(key);
             None
         }
+        (SelectedTopic::Dfa, _) => todo!(),
     }
 }
 

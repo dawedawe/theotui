@@ -49,6 +49,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
     match model.selected_topic {
         SelectedTopic::SetTheory => render_settheory(frame, topics_content_rect, model),
         SelectedTopic::PropositionalLogic => render_proplogic(frame, topics_content_rect, model),
+        SelectedTopic::Dfa => render_dfa(frame, topics_content_rect, model),
     }
 }
 
@@ -398,6 +399,103 @@ p -> q  // implication";
     let text = Text::from(Line::from(msg)).style(default_style);
     let help_message = Paragraph::new(text);
     frame.render_widget(help_message, key_bindings_rect);
+}
+
+fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    let default_style = default_style();
+
+    let main_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(1),    // alphabet, states, etc., help
+                Constraint::Length(1), // key bindings
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let key_bindings_rect = main_vert_split[1];
+    let (non_help_rect, help_rect) = if model.show_help {
+        let halfs = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(main_vert_split[0]);
+        (halfs[0], halfs[1])
+    } else {
+        (main_vert_split[0], Rect::default())
+    };
+
+    let sub_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length(3), // alphabet input
+                Constraint::Length(3), // states
+                Constraint::Length(3), // start state
+                Constraint::Length(3), // end states
+                Constraint::Length(3), // transitions
+                Constraint::Length(3), // result
+            ]
+            .as_ref(),
+        )
+        .split(non_help_rect);
+
+    let alphabet_rect = sub_vert_split[0];
+    let states_rect = sub_vert_split[1];
+    let start_state_rect = sub_vert_split[2];
+    let end_states_rect = sub_vert_split[3];
+    let transitions_rect = sub_vert_split[4];
+    let result_rect = sub_vert_split[5];
+
+    model
+        .dfa_state
+        .alphabet_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .dfa_state
+        .states_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .dfa_state
+        .start_state_textarea
+        .set_cursor_line_style(default_style);
+
+    // render alphabet textarea
+    let alphabet_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Alphabet Σ ")
+        .style(default_style);
+    frame.render_widget(alphabet_block, alphabet_rect);
+    let alphabet_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(alphabet_rect);
+    frame.render_widget(&model.dfa_state.alphabet_textarea, alphabet_rect[0]);
+
+    // render states textarea
+    let states_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" States S ")
+        .style(default_style);
+    frame.render_widget(states_block, states_rect);
+    let states_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(states_rect);
+    frame.render_widget(&model.dfa_state.states_textarea, states_rect[0]);
+
+    // render start state textarea
+    let start_state_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Start State ")
+        .style(default_style);
+    frame.render_widget(start_state_block, start_state_rect);
+    let start_state_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(start_state_rect);
+    frame.render_widget(&model.dfa_state.start_state_textarea, start_state_rect[0]);
 }
 
 fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarState) {
