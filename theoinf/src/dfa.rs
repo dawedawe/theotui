@@ -4,13 +4,13 @@ pub mod parser {
     use winnow::{
         ModalResult, Parser,
         ascii::{alphanumeric1, multispace0},
-        combinator::{cut_err, delimited, separated},
+        combinator::{cut_err, delimited, separated, trace},
         error::{ContextError, ErrMode},
         token::take_while,
     };
 
     fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
-        delimited(multispace0, s, multispace0)
+        trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
     /// Parses an alphabet definition like `A = { 'a', 'b', 'c' }`
@@ -34,10 +34,13 @@ pub mod parser {
     pub fn state_set<'s>() -> impl Parser<&'s str, Vec<&'s str>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
         let comma_sep_list = separated(1.., alphanumeric1, separator);
-        delimited(
-            delimited(multispace0, "{", multispace0),
-            comma_sep_list,
-            delimited(multispace0, cut_err("}"), multispace0),
+        trace(
+            "state_set",
+            delimited(
+                delimited(multispace0, "{", multispace0),
+                comma_sep_list,
+                delimited(multispace0, cut_err("}"), multispace0),
+            ),
         )
     }
 
@@ -83,7 +86,10 @@ pub mod parser {
             alphanumeric1,
             close_paren,
         );
-        transition.map(|(_, s_in, _, sym, _, s_out, _)| (s_in, sym, s_out))
+        trace(
+            "transition",
+            transition.map(|(_, s_in, _, sym, _, s_out, _)| (s_in, sym, s_out)),
+        )
     }
 
     /// Parses a transitions set like `{ (s0, 'a', s1), (s1, 'b', s2) }`
@@ -91,10 +97,13 @@ pub mod parser {
     -> impl Parser<&'s str, Vec<(&'s str, &'s str, &'s str)>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
         let comma_sep_list = separated(0.., transition(), separator);
-        delimited(
-            delimited(multispace0, "{", multispace0),
-            comma_sep_list,
-            delimited(multispace0, cut_err("}"), multispace0),
+        trace(
+            "transitions_set",
+            delimited(
+                delimited(multispace0, "{", multispace0),
+                comma_sep_list,
+                delimited(multispace0, cut_err("}"), multispace0),
+            ),
         )
     }
 
