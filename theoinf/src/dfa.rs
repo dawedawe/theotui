@@ -6,19 +6,20 @@ pub mod parser {
         ascii::{alphanumeric1, multispace0},
         combinator::{cut_err, delimited, separated, trace},
         error::{ContextError, ErrMode},
-        token::take_while,
+        token::{any, take_while},
     };
+
+    use crate::dfa::Dfa;
 
     fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
         trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
     /// Parses an alphabet definition like `A = { 'a', 'b', 'c' }`
-    pub fn parse_alphabet_definition<'s>(input: &'s mut &str) -> ModalResult<Vec<&'s str>> {
+    pub fn parse_alphabet_definition(input: &mut &str) -> ModalResult<Vec<char>> {
         let identifier = whitespace_wrapped("A");
         let equals = whitespace_wrapped("=");
-        let symbol = take_while(1..=1, |_: char| -> bool { true });
-        let element = delimited("'", symbol, cut_err("'"));
+        let element = delimited("'", any, cut_err("'"));
         let separator = whitespace_wrapped(",");
         let comma_sep_list = separated(1.., element, separator);
         let setp = delimited(
@@ -71,10 +72,9 @@ pub mod parser {
     }
 
     /// Parses a transition like `(s0, 'a', s1)`
-    pub fn transition<'s>()
-    -> impl Parser<&'s str, (&'s str, &'s str, &'s str), ErrMode<ContextError>> {
-        let symbol = take_while(1..=1, |_: char| -> bool { true });
-        let element = delimited("'", symbol, cut_err("'"));
+    pub fn transition<'s>() -> impl Parser<&'s str, (&'s str, char, &'s str), ErrMode<ContextError>>
+    {
+        let element = delimited("'", any, cut_err("'"));
         let open_paren = whitespace_wrapped("(");
         let close_paren = whitespace_wrapped(")");
         let transition = (
@@ -94,7 +94,7 @@ pub mod parser {
 
     /// Parses a transitions set like `{ (s0, 'a', s1), (s1, 'b', s2) }`
     pub fn transitions_set<'s>()
-    -> impl Parser<&'s str, Vec<(&'s str, &'s str, &'s str)>, ErrMode<ContextError>> {
+    -> impl Parser<&'s str, Vec<(&'s str, char, &'s str)>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
         let comma_sep_list = separated(0.., transition(), separator);
         trace(
@@ -110,12 +110,46 @@ pub mod parser {
     /// Parse a transitions definition like `delta = { (s0, 'a', s1), (s1, 'b', s2) }`
     pub fn parse_transitions_definition<'s>(
         input: &'s mut &str,
-    ) -> ModalResult<Vec<(&'s str, &'s str, &'s str)>> {
+    ) -> ModalResult<Vec<(&'s str, char, &'s str)>> {
         let identifier = whitespace_wrapped("delta");
         let equals = whitespace_wrapped("=");
         (identifier, equals, transitions_set())
             .map(|(_, _, x)| x)
             .parse_next(input)
+    }
+
+    /// Parse a [Dfa] definition
+    pub fn parse_dfa_definition(input: &mut &str) -> ModalResult<Dfa> {
+        let mut lines: Vec<&str> = input
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let alphabet = parse_alphabet_definition(&mut lines[0])?
+            .iter()
+            .copied()
+            .collect();
+        let states = parse_states_definition(&mut lines[1])?
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let start_state = parse_start_state_definition(&mut lines[2])?.to_string();
+        let final_states = parse_final_states_definition(&mut lines[3])?
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let transitions = parse_transitions_definition(&mut lines[4])?
+            .iter()
+            .map(|(s_in, sym, s_out)| (s_in.to_string(), *sym, s_out.to_string()))
+            .collect();
+
+        Ok(Dfa {
+            states,
+            alphabet,
+            transitions,
+            final_states,
+            start_state,
+        })
     }
 }
 
@@ -124,11 +158,11 @@ type Symbol = char;
 
 /// Defines a deterministic finite automata
 pub struct Dfa {
-    states: HashSet<State>,
-    alphabet: HashSet<Symbol>,
-    transitions: HashSet<(State, Symbol, State)>,
-    final_states: HashSet<State>,
-    start_state: State,
+    pub(crate) states: HashSet<State>,
+    pub(crate) alphabet: HashSet<Symbol>,
+    pub(crate) transitions: HashSet<(State, Symbol, State)>,
+    pub(crate) final_states: HashSet<State>,
+    pub(crate) start_state: State,
 }
 
 /*
@@ -242,6 +276,16 @@ pub struct RunningDfa<'a> {
 }
 
 impl<'a> RunningDfa<'a> {
+    /// Creates a [RunningDfa] in the [Dfa]'s start state and the word not yet processed
+    pub fn new(dfa: &'a Dfa, word: &str) -> Self {
+        Self {
+            dfa,
+            current_state: &dfa.start_state,
+            remaining_input: word.to_string().chars().collect(),
+            accepted_input: vec![],
+        }
+    }
+
     /// Tries to consume the next symbol.
     pub fn transition(&mut self) -> bool {
         match self.remaining_input.first() {
@@ -400,7 +444,7 @@ mod tests {
     fn parse_alphabet_works() {
         let mut s = "A = { 'a' , 'b','c', ' ' } ";
         let symbols = parser::parse_alphabet_definition(&mut s).unwrap();
-        assert_eq!(symbols, vec!["a", "b", "c", " "]);
+        assert_eq!(symbols, vec!['a', 'b', 'c', ' ']);
     }
 
     #[test]
@@ -424,11 +468,41 @@ mod tests {
         assert_eq!(state, "s0");
     }
 
-    // delta = { (s0, 'a', s1), (s1, 'b', s2), ... } // transitions
     #[test]
     fn parse_transitions_works() {
         let mut s = "delta = { (s0, 'a', s1), (s1, 'b', s2) }";
         let r = parser::parse_transitions_definition(&mut s).unwrap();
-        assert_eq!(r, vec![("s0", "a", "s1"), ("s1", "b", "s2")]);
+        assert_eq!(r, vec![("s0", 'a', "s1"), ("s1", 'b', "s2")]);
+    }
+
+    #[test]
+    fn parse_dfa_definition_works() {
+        let mut s = "
+A = { 'a', 'b'  }
+
+S = { s0, s1, s2 }
+start = s0
+F = { s2  }
+delta = { (s0, 'a', s1), (s1, 'b', s2) }
+";
+        let r = parser::parse_dfa_definition(&mut s);
+        assert!(r.is_ok());
+        let dfa = r.unwrap();
+        assert_eq!(
+            dfa.states,
+            HashSet::from_iter(["s0".into(), "s1".into(), "s2".into()])
+        );
+        assert_eq!(dfa.alphabet, HashSet::from_iter(['a', 'b']));
+        assert_eq!(dfa.start_state, "s0");
+        assert_eq!(dfa.final_states, HashSet::from_iter(["s2".into()]));
+        assert_eq!(
+            dfa.transitions,
+            HashSet::from_iter([
+                ("s0".into(), 'a', "s1".into()),
+                ("s1".into(), 'b', "s2".into())
+            ])
+        );
+        assert!(dfa.accepts("ab"));
+        assert!(!dfa.accepts("abc"));
     }
 }
