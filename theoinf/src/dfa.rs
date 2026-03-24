@@ -38,9 +38,9 @@ pub mod parser {
     }
 
     /// Parses a state set like `{ s0, s1, s2 }`
-    pub fn state_set<'s>() -> impl Parser<&'s str, Vec<&'s str>, ErrMode<ContextError>> {
+    pub fn state_set<'s>(min: usize) -> impl Parser<&'s str, Vec<&'s str>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
-        let comma_sep_list = separated(1.., state_name(), separator);
+        let comma_sep_list = separated(min.., state_name(), separator);
         trace(
             "state_set",
             delimited(
@@ -55,7 +55,7 @@ pub mod parser {
     pub fn parse_states_definition<'s>(input: &'s mut &str) -> ModalResult<Vec<&'s str>> {
         let identifier = whitespace_wrapped("S");
         let equals = whitespace_wrapped("=");
-        let mut decl = (identifier, equals, state_set()).map(|(_, _, x)| x);
+        let mut decl = (identifier, equals, state_set(1)).map(|(_, _, x)| x);
         decl.parse_next(input)
     }
 
@@ -63,7 +63,7 @@ pub mod parser {
     pub fn parse_final_states_definition<'s>(input: &'s mut &str) -> ModalResult<Vec<&'s str>> {
         let identifier = whitespace_wrapped("F");
         let equals = whitespace_wrapped("=");
-        let mut decl = (identifier, equals, state_set()).map(|(_, _, x)| x);
+        let mut decl = (identifier, equals, state_set(0)).map(|(_, _, x)| x);
         decl.parse_next(input)
     }
 
@@ -171,7 +171,7 @@ pub mod parser {
             states: states.expect("parsed S expected"),
             sigma: sigma.expect("parsed Sigma expected"),
             delta: delta.expect("parsed delta expected"),
-            final_states: final_states.expect("parsd F expected"),
+            final_states: final_states.expect("parsed F expected"),
             start_state: start.expect("parsed start expected"),
         })
     }
@@ -456,6 +456,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_empty_sigma_should_fail() {
+        let mut s = "Sigma = { } ";
+        let r = parser::parse_sigma_definition(&mut s);
+        assert!(r.is_err());
+    }
+
+    #[test]
     fn parse_states_works() {
         let mut s = "S = { s0 , s1,s2  } ";
         let states = parser::parse_states_definition(&mut s).unwrap();
@@ -463,10 +470,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_empty_states_should_fail() {
+        let mut s = "S = {} ";
+        let r = parser::parse_states_definition(&mut s);
+        assert!(r.is_err());
+    }
+
+    #[test]
     fn parse_final_states_works() {
         let mut s = "F = { s_0 , s1  } ";
         let states = parser::parse_final_states_definition(&mut s).unwrap();
         assert_eq!(states, vec!["s_0", "s1"]);
+    }
+
+    #[test]
+    fn parse_empty_final_states_should_fail() {
+        let mut s = "F = {   } ";
+        let states = parser::parse_final_states_definition(&mut s).unwrap();
+        assert!(states.is_empty());
     }
 
     #[test]
