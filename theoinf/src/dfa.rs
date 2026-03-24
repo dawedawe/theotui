@@ -17,8 +17,8 @@ pub mod parser {
         trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
-    /// Parses an alphabet definition like `A = { 'a', 'b', 'c' }`
-    pub fn parse_alphabet_definition(input: &mut &str) -> ModalResult<Vec<char>> {
+    /// Parses a Sigma definition like `Sigma = { 'a', 'b', 'c' }`
+    pub fn parse_sigma_definition(input: &mut &str) -> ModalResult<Vec<char>> {
         let identifier = whitespace_wrapped("Sigma");
         let equals = whitespace_wrapped("=");
         let element = delimited("'", any, cut_err("'"));
@@ -77,13 +77,13 @@ pub mod parser {
             .parse_next(input)
     }
 
-    /// Parses a transition like `(s0, 'a', s1)`
-    pub fn transition<'s>() -> impl Parser<&'s str, (&'s str, char, &'s str), ErrMode<ContextError>>
+    /// Parses a delta tuple like `(s0, 'a', s1)`
+    pub fn delta_tuple<'s>() -> impl Parser<&'s str, (&'s str, char, &'s str), ErrMode<ContextError>>
     {
         let element = delimited("'", any, cut_err("'"));
         let open_paren = whitespace_wrapped("(");
         let close_paren = whitespace_wrapped(")");
-        let transition = (
+        let tuple = (
             open_paren,
             state_name(),
             whitespace_wrapped(","),
@@ -93,18 +93,18 @@ pub mod parser {
             close_paren,
         );
         trace(
-            "transition",
-            transition.map(|(_, s_in, _, sym, _, s_out, _)| (s_in, sym, s_out)),
+            "delta_tuple",
+            tuple.map(|(_, s_in, _, sym, _, s_out, _)| (s_in, sym, s_out)),
         )
     }
 
-    /// Parses a transitions set like `{ (s0, 'a', s1), (s1, 'b', s2) }`
-    pub fn transitions_set<'s>()
+    /// Parses a delta set like `{ (s0, 'a', s1), (s1, 'b', s2) }`
+    pub fn delta_set<'s>()
     -> impl Parser<&'s str, Vec<(&'s str, char, &'s str)>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
-        let comma_sep_list = separated(0.., transition(), separator);
+        let comma_sep_list = separated(0.., delta_tuple(), separator);
         trace(
-            "transitions_set",
+            "delta_set",
             delimited(
                 delimited(multispace0, "{", multispace0),
                 comma_sep_list,
@@ -113,13 +113,13 @@ pub mod parser {
         )
     }
 
-    /// Parse a transitions definition like `delta = { (s0, 'a', s1), (s1, 'b', s2) }`
-    pub fn parse_transitions_definition<'s>(
+    /// Parse a delta definition like `delta = { (s0, 'a', s1), (s1, 'b', s2) }`
+    pub fn parse_delta_definition<'s>(
         input: &'s mut &str,
     ) -> ModalResult<Vec<(&'s str, char, &'s str)>> {
         let identifier = whitespace_wrapped("delta");
         let equals = whitespace_wrapped("=");
-        (identifier, equals, transitions_set())
+        (identifier, equals, delta_set())
             .map(|(_, _, x)| x)
             .parse_next(input)
     }
@@ -144,7 +144,7 @@ pub mod parser {
         for line in lines {
             let mut line: &str = &line;
             if line.starts_with("Sigma") {
-                let r = parse_alphabet_definition(&mut line)?;
+                let r = parse_sigma_definition(&mut line)?;
                 sigma = Some(r.into_iter().collect());
             } else if line.starts_with("start") {
                 let r = parse_start_state_definition(&mut line)?;
@@ -156,7 +156,7 @@ pub mod parser {
                 let r = parse_final_states_definition(&mut line)?;
                 final_states = Some(r.into_iter().map(|s| s.to_string()).collect());
             } else if line.starts_with("delta") {
-                let r = parse_transitions_definition(&mut line)?;
+                let r = parse_delta_definition(&mut line)?;
                 delta = Some(
                     r.into_iter()
                         .map(|(s_in, sym, s_out)| (s_in.to_string(), sym, s_out.to_string()))
@@ -169,8 +169,8 @@ pub mod parser {
 
         Ok(Dfa {
             states: states.expect("parsed S expected"),
-            alphabet: sigma.expect("parsed Sigma expected"),
-            transitions: delta.expect("parsed delta expected"),
+            sigma: sigma.expect("parsed Sigma expected"),
+            delta: delta.expect("parsed delta expected"),
             final_states: final_states.expect("parsd F expected"),
             start_state: start.expect("parsed start expected"),
         })
@@ -183,8 +183,8 @@ type Symbol = char;
 /// Defines a deterministic finite automata
 pub struct Dfa {
     pub(crate) states: HashSet<State>,
-    pub(crate) alphabet: HashSet<Symbol>,
-    pub(crate) transitions: HashSet<(State, Symbol, State)>,
+    pub(crate) sigma: HashSet<Symbol>,
+    pub(crate) delta: HashSet<(State, Symbol, State)>,
     pub(crate) final_states: HashSet<State>,
     pub(crate) start_state: State,
 }
@@ -193,8 +193,8 @@ impl Dfa {
     /// Constructs a valid [Dfa]
     pub fn new(
         states: HashSet<State>,
-        alphabet: HashSet<Symbol>,
-        transitions: HashSet<(State, Symbol, State)>,
+        sigma: HashSet<Symbol>,
+        delta: HashSet<(State, Symbol, State)>,
         final_states: HashSet<State>,
         start_state: State,
     ) -> Result<Self, String> {
@@ -206,65 +206,62 @@ impl Dfa {
             return Err("The final states must be contained in the states set.".into());
         }
 
-        let (mut unknown_transition_states, mut unknown_transition_symbols) =
-            transitions.iter().fold(
-                (vec![], vec![]),
-                |(mut acc1, mut acc2), (s_in, sym, s_out)| {
-                    if !states.contains(s_in) {
-                        acc1.push(s_in.as_str());
-                    }
-                    if !states.contains(s_out) {
-                        acc1.push(s_out.as_str());
-                    }
-                    if !alphabet.contains(sym) {
-                        acc2.push(sym.to_string());
-                    }
-                    (acc1, acc2)
-                },
-            );
-        if !unknown_transition_states.is_empty() {
-            unknown_transition_states.sort();
-            unknown_transition_states.dedup();
-            let s = unknown_transition_states.join(", ");
-            let msg = format!("The transition relation contains the following unknown states: {s}");
+        let (mut unknown_delta_states, mut unknown_delta_symbols) = delta.iter().fold(
+            (vec![], vec![]),
+            |(mut acc1, mut acc2), (s_in, sym, s_out)| {
+                if !states.contains(s_in) {
+                    acc1.push(s_in.as_str());
+                }
+                if !states.contains(s_out) {
+                    acc1.push(s_out.as_str());
+                }
+                if !sigma.contains(sym) {
+                    acc2.push(sym.to_string());
+                }
+                (acc1, acc2)
+            },
+        );
+        if !unknown_delta_states.is_empty() {
+            unknown_delta_states.sort();
+            unknown_delta_states.dedup();
+            let s = unknown_delta_states.join(", ");
+            let msg = format!("The delta relation contains the following unknown states: {s}");
             return Err(msg);
         }
 
-        if !unknown_transition_symbols.is_empty() {
-            unknown_transition_symbols.sort();
-            unknown_transition_symbols.dedup();
-            let s = unknown_transition_symbols.join(", ");
-            let msg =
-                format!("The transition relation contains the following unknown symbols: {s}");
+        if !unknown_delta_symbols.is_empty() {
+            unknown_delta_symbols.sort();
+            unknown_delta_symbols.dedup();
+            let s = unknown_delta_symbols.join(", ");
+            let msg = format!("The delta relation contains the following unknown symbols: {s}");
             return Err(msg);
         }
 
-        let mut non_deterministic_transitions = transitions.iter().filter_map(|(s_in, sym, _)| {
-            let trans = transitions.iter().filter(|(a, b, _)| (a, b) == (s_in, sym));
-            if trans.count() == 1 {
+        let mut non_deterministic_delta = delta.iter().filter_map(|(s_in, sym, _)| {
+            let filtered = delta.iter().filter(|(a, b, _)| (a, b) == (s_in, sym));
+            if filtered.count() == 1 {
                 None
             } else {
                 Some((s_in, sym))
             }
         });
 
-        if non_deterministic_transitions.any(|_| true) {
-            let mut non_deterministic_inputs: Vec<String> = non_deterministic_transitions
+        if non_deterministic_delta.any(|_| true) {
+            let mut non_deterministic_inputs: Vec<String> = non_deterministic_delta
                 .map(|(state, sym)| format!("({state}, {sym})"))
                 .collect();
             non_deterministic_inputs.sort();
             non_deterministic_inputs.dedup();
             let s = non_deterministic_inputs.join(", ");
-            let msg = format!(
-                "The transition function is non-deterministic for the following inputs: {s}"
-            );
+            let msg =
+                format!("The delta function is non-deterministic for the following inputs: {s}");
             return Err(msg);
         }
 
         Ok(Dfa {
             states,
-            alphabet,
-            transitions,
+            sigma,
+            delta,
             final_states,
             start_state,
         })
@@ -309,7 +306,7 @@ impl<'a> RunningDfa<'a> {
             Some(symbol) => {
                 let t = self
                     .dfa
-                    .transitions
+                    .delta
                     .iter()
                     .find(|(curr, sym, _nxt)| curr == self.current_state && sym == symbol);
                 if let Some((_curr, sym, nxt)) = t {
@@ -344,12 +341,7 @@ mod tests {
             "s0".into(),
         )
         .unwrap();
-        let mut dfa_state = RunningDfa {
-            dfa: &dfa,
-            current_state: &dfa.start_state,
-            remaining_input: vec!['a'],
-            accepted_input: vec![],
-        };
+        let mut dfa_state = RunningDfa::new(&dfa, "a");
         assert!(dfa_state.transition());
         assert_eq!(dfa_state.current_state, "s1");
         assert_eq!(dfa_state.accepted_input, vec!['a']);
@@ -381,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn transition_states_must_be_known() {
+    fn delta_states_must_be_known() {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
@@ -401,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn transition_symbols_must_be_known() {
+    fn delta_symbols_must_be_known() {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
@@ -413,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn non_deterministic_transitions_cant_be_created() {
+    fn non_deterministic_delta_cant_be_created() {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
@@ -429,7 +421,7 @@ mod tests {
         match dfa {
             Err(s) => assert_eq!(
                 s,
-                "The transition function is non-deterministic for the following inputs: (s0, a), (s0, b)"
+                "The delta function is non-deterministic for the following inputs: (s0, a), (s0, b)"
             ),
             _ => panic!("expected Err"),
         }
@@ -457,9 +449,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_alphabet_works() {
+    fn parse_sigma_works() {
         let mut s = "Sigma = { 'a' , 'b','c', ' ' } ";
-        let symbols = parser::parse_alphabet_definition(&mut s).unwrap();
+        let symbols = parser::parse_sigma_definition(&mut s).unwrap();
         assert_eq!(symbols, vec!['a', 'b', 'c', ' ']);
     }
 
@@ -485,9 +477,9 @@ mod tests {
     }
 
     #[test]
-    fn parse_transitions_works() {
+    fn parse_delta_works() {
         let mut s = "delta = { (s0, 'a', s1), (s1, 'b', s2) }";
-        let r = parser::parse_transitions_definition(&mut s).unwrap();
+        let r = parser::parse_delta_definition(&mut s).unwrap();
         assert_eq!(r, vec![("s0", 'a', "s1"), ("s1", 'b', "s2")]);
     }
 
@@ -508,11 +500,11 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
             dfa.states,
             HashSet::from_iter(["s0".into(), "s1".into(), "s2".into()])
         );
-        assert_eq!(dfa.alphabet, HashSet::from_iter(['a', 'b']));
+        assert_eq!(dfa.sigma, HashSet::from_iter(['a', 'b']));
         assert_eq!(dfa.start_state, "s0");
         assert_eq!(dfa.final_states, HashSet::from_iter(["s2".into()]));
         assert_eq!(
-            dfa.transitions,
+            dfa.delta,
             HashSet::from_iter([
                 ("s0".into(), 'a', "s1".into()),
                 ("s1".into(), 'b', "s2".into())
