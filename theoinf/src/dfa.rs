@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 
 pub mod parser {
+    use std::collections::HashSet;
+
     use winnow::{
         ModalResult, Parser,
         ascii::multispace0,
@@ -17,7 +19,7 @@ pub mod parser {
 
     /// Parses an alphabet definition like `A = { 'a', 'b', 'c' }`
     pub fn parse_alphabet_definition(input: &mut &str) -> ModalResult<Vec<char>> {
-        let identifier = whitespace_wrapped("A");
+        let identifier = whitespace_wrapped("Sigma");
         let equals = whitespace_wrapped("=");
         let element = delimited("'", any, cut_err("'"));
         let separator = whitespace_wrapped(",");
@@ -124,39 +126,53 @@ pub mod parser {
 
     /// Parse a [Dfa] definition
     pub fn parse_dfa_definition(input: &mut &str) -> ModalResult<Dfa> {
-        let mut lines: Vec<&str> = input
+        let lines: Vec<String> = input
             .lines()
-            .map(|l| l.trim())
+            .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
             .collect();
         if lines.len() != 5 {
             return Err(ErrMode::Cut(ContextError::default()));
         }
 
-        let alphabet = parse_alphabet_definition(&mut lines[0])?
-            .iter()
-            .copied()
-            .collect();
-        let states = parse_states_definition(&mut lines[1])?
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let start_state = parse_start_state_definition(&mut lines[2])?.to_string();
-        let final_states = parse_final_states_definition(&mut lines[3])?
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let transitions = parse_transitions_definition(&mut lines[4])?
-            .iter()
-            .map(|(s_in, sym, s_out)| (s_in.to_string(), *sym, s_out.to_string()))
-            .collect();
+        let mut sigma: Option<HashSet<char>> = None;
+        let mut states: Option<HashSet<String>> = None;
+        let mut start: Option<String> = None;
+        let mut final_states: Option<HashSet<String>> = None;
+        let mut delta: Option<HashSet<(String, char, String)>> = None;
+
+        for line in lines {
+            let mut line: &str = &line;
+            if line.starts_with("Sigma") {
+                let r = parse_alphabet_definition(&mut line)?;
+                sigma = Some(r.into_iter().collect());
+            } else if line.starts_with("start") {
+                let r = parse_start_state_definition(&mut line)?;
+                start = Some(r.to_string());
+            } else if line.starts_with("S") {
+                let r = parse_states_definition(&mut line)?;
+                states = Some(r.into_iter().map(|s| s.to_string()).collect());
+            } else if line.starts_with("F") {
+                let r = parse_final_states_definition(&mut line)?;
+                final_states = Some(r.into_iter().map(|s| s.to_string()).collect());
+            } else if line.starts_with("delta") {
+                let r = parse_transitions_definition(&mut line)?;
+                delta = Some(
+                    r.into_iter()
+                        .map(|(s_in, sym, s_out)| (s_in.to_string(), sym, s_out.to_string()))
+                        .collect(),
+                );
+            } else {
+                return Err(ErrMode::Cut(ContextError::default()));
+            }
+        }
 
         Ok(Dfa {
-            states,
-            alphabet,
-            transitions,
-            final_states,
-            start_state,
+            states: states.expect("parsed S expected"),
+            alphabet: sigma.expect("parsed Sigma expected"),
+            transitions: delta.expect("parsed delta expected"),
+            final_states: final_states.expect("parsd F expected"),
+            start_state: start.expect("parsed start expected"),
         })
     }
 }
@@ -172,14 +188,6 @@ pub struct Dfa {
     pub(crate) final_states: HashSet<State>,
     pub(crate) start_state: State,
 }
-
-/*
-A = { 'a', 'b', ... } // alphabet
-S = { s0, s1, s2, ...} // states
-start = s0 // start state
-F = { s2, s3 } // final states
-delta = { (s0, 'a', s1), (s1, 'b', s2), ... } // transitions
-*/
 
 impl Dfa {
     /// Constructs a valid [Dfa]
@@ -450,7 +458,7 @@ mod tests {
 
     #[test]
     fn parse_alphabet_works() {
-        let mut s = "A = { 'a' , 'b','c', ' ' } ";
+        let mut s = "Sigma = { 'a' , 'b','c', ' ' } ";
         let symbols = parser::parse_alphabet_definition(&mut s).unwrap();
         assert_eq!(symbols, vec!['a', 'b', 'c', ' ']);
     }
@@ -486,7 +494,7 @@ mod tests {
     #[test]
     fn parse_dfa_definition_works() {
         let mut s = "
-A = { 'a', 'b'  }
+Sigma = { 'a', 'b'  }
 
 S = { s0, s1, s2 }
 start = s0
