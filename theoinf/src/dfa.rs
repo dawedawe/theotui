@@ -3,7 +3,7 @@ use std::collections::HashSet;
 pub mod parser {
     use winnow::{
         ModalResult, Parser,
-        ascii::{alphanumeric1, multispace0},
+        ascii::multispace0,
         combinator::{cut_err, delimited, separated, trace},
         error::{ContextError, ErrMode},
         token::{any, take_while},
@@ -31,10 +31,14 @@ pub mod parser {
         decl.parse_next(input)
     }
 
+    pub fn state_name<'s>() -> impl Parser<&'s str, &'s str, ErrMode<ContextError>> {
+        take_while(1.., |c: char| c.is_alphanumeric() || c == '_')
+    }
+
     /// Parses a state set like `{ s0, s1, s2 }`
     pub fn state_set<'s>() -> impl Parser<&'s str, Vec<&'s str>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
-        let comma_sep_list = separated(1.., alphanumeric1, separator);
+        let comma_sep_list = separated(1.., state_name(), separator);
         trace(
             "state_set",
             delimited(
@@ -65,7 +69,7 @@ pub mod parser {
     pub fn parse_start_state_definition<'s>(input: &'s mut &str) -> ModalResult<&'s str> {
         let identifier = whitespace_wrapped("start");
         let equals = whitespace_wrapped("=");
-        let state = delimited(multispace0, alphanumeric1, multispace0);
+        let state = delimited(multispace0, state_name(), multispace0);
         (identifier, equals, state)
             .map(|(_, _, x)| x)
             .parse_next(input)
@@ -79,11 +83,11 @@ pub mod parser {
         let close_paren = whitespace_wrapped(")");
         let transition = (
             open_paren,
-            alphanumeric1,
+            state_name(),
             whitespace_wrapped(","),
             element,
             whitespace_wrapped(","),
-            alphanumeric1,
+            state_name(),
             close_paren,
         );
         trace(
@@ -125,6 +129,10 @@ pub mod parser {
             .map(|l| l.trim())
             .filter(|l| !l.is_empty())
             .collect();
+        if lines.len() != 5 {
+            return Err(ErrMode::Cut(ContextError::default()));
+        }
+
         let alphabet = parse_alphabet_definition(&mut lines[0])?
             .iter()
             .copied()
@@ -456,9 +464,9 @@ mod tests {
 
     #[test]
     fn parse_final_states_works() {
-        let mut s = "F = { s0 , s1  } ";
+        let mut s = "F = { s_0 , s1  } ";
         let states = parser::parse_final_states_definition(&mut s).unwrap();
-        assert_eq!(states, vec!["s0", "s1"]);
+        assert_eq!(states, vec!["s_0", "s1"]);
     }
 
     #[test]
