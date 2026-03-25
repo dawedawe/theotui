@@ -1,4 +1,4 @@
-use crate::model::{Model, PropLogicResultFilter, SelectedTopic};
+use crate::model::{DfaFocus, Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -408,7 +408,7 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Min(1),    // alphabet, states, etc., help
+                Constraint::Min(1),    // definition, input word
                 Constraint::Length(1), // key bindings
             ]
             .as_ref(),
@@ -430,72 +430,64 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .direction(Direction::Vertical)
         .constraints(
             [
-                Constraint::Length(3), // alphabet input
-                Constraint::Length(3), // states
-                Constraint::Length(3), // start state
-                Constraint::Length(3), // end states
-                Constraint::Length(3), // transitions
+                Constraint::Length(7), // definition
+                Constraint::Length(3), // input word
                 Constraint::Length(3), // result
             ]
             .as_ref(),
         )
         .split(non_help_rect);
 
-    let alphabet_rect = sub_vert_split[0];
-    let states_rect = sub_vert_split[1];
-    let start_state_rect = sub_vert_split[2];
-    let end_states_rect = sub_vert_split[3];
-    let transitions_rect = sub_vert_split[4];
-    let result_rect = sub_vert_split[5];
+    let definition_rect = sub_vert_split[0];
+    let word_input_rect = sub_vert_split[1];
+    let result_rect = sub_vert_split[2];
 
     model
         .dfa_state
-        .alphabet_textarea
+        .definition_textarea
         .set_cursor_line_style(default_style);
     model
         .dfa_state
-        .states_textarea
+        .input_word_textarea
         .set_cursor_line_style(default_style);
-    model
+
+    // render definition textarea
+    let definition_block = Block::default().borders(Borders::ALL).style(default_style);
+    let definition_block = if model.dfa_state.focus == DfaFocus::Definition {
+        definition_block.title(" Definition* ")
+    } else {
+        definition_block.title(" Definition ")
+    };
+    frame.render_widget(definition_block, definition_rect);
+    let definition_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(definition_rect);
+    frame.render_widget(&model.dfa_state.definition_textarea, definition_rect[0]);
+
+    // render word input textarea
+    let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
+    let word_input_block = if model.dfa_state.focus == DfaFocus::WordInput {
+        word_input_block.title(" Word* ")
+    } else {
+        word_input_block.title(" Word ")
+    };
+    frame.render_widget(word_input_block, word_input_rect);
+    let word_input_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(word_input_rect);
+    frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect[0]);
+
+    // render result
+    let result = model
         .dfa_state
-        .start_state_textarea
-        .set_cursor_line_style(default_style);
-
-    // render alphabet textarea
-    let alphabet_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Alphabet Σ ")
-        .style(default_style);
-    frame.render_widget(alphabet_block, alphabet_rect);
-    let alphabet_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(alphabet_rect);
-    frame.render_widget(&model.dfa_state.alphabet_textarea, alphabet_rect[0]);
-
-    // render states textarea
-    let states_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" States S ")
-        .style(default_style);
-    frame.render_widget(states_block, states_rect);
-    let states_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(states_rect);
-    frame.render_widget(&model.dfa_state.states_textarea, states_rect[0]);
-
-    // render start state textarea
-    let start_state_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Start State ")
-        .style(default_style);
-    frame.render_widget(start_state_block, start_state_rect);
-    let start_state_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(start_state_rect);
-    frame.render_widget(&model.dfa_state.start_state_textarea, start_state_rect[0]);
+        .result
+        .map_or_else(|| "".into(), |b| b.to_string());
+    let result_paragraph = Paragraph::new(result)
+        .style(default_style)
+        .block(Block::default().borders(Borders::ALL).title(" Result "));
+    frame.render_widget(result_paragraph, result_rect);
 }
 
 fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarState) {

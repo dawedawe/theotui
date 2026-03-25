@@ -1,10 +1,15 @@
-use crate::model::{Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult};
+use crate::model::{
+    DfaFocus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult,
+};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
 use std::collections::HashMap;
-use theoinf::propositional_logic::{Assignment, run};
+use theoinf::{
+    dfa,
+    propositional_logic::{Assignment, run},
+};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 pub(crate) enum PropLogicMsg {
@@ -19,12 +24,18 @@ pub(crate) enum SetTheoryMsg {
     Eval,
 }
 
+pub(crate) enum DfaMsg {
+    Eval,
+    FocusNext,
+}
+
 pub(crate) enum Msg {
     Exit,
     NextTab,
     PrevTab,
     PropLogicMsg(PropLogicMsg),
     SetTheoryMsg(SetTheoryMsg),
+    DfaMsg(DfaMsg),
     ToggleHelp,
 }
 
@@ -75,7 +86,19 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             model.settheory_state.term_textarea.input(key);
             None
         }
-        (SelectedTopic::Dfa, _) => todo!(),
+        (SelectedTopic::Dfa, KeyCode::F(2)) => Some(Msg::DfaMsg(DfaMsg::FocusNext)),
+        (SelectedTopic::Dfa, KeyCode::F(5)) => Some(Msg::DfaMsg(DfaMsg::Eval)),
+        (SelectedTopic::Dfa, _) => {
+            match model.dfa_state.focus {
+                crate::model::DfaFocus::Definition => {
+                    model.dfa_state.definition_textarea.input(key);
+                }
+                crate::model::DfaFocus::WordInput => {
+                    model.dfa_state.input_word_textarea.input(key);
+                }
+            }
+            None
+        }
     }
 }
 
@@ -172,6 +195,25 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             match r {
                 Ok(expr) => model.settheory_state.result = SetTheoryResult::Expr(expr),
                 Err(e) => model.settheory_state.result = SetTheoryResult::Error(e),
+            }
+        }
+        Msg::DfaMsg(DfaMsg::FocusNext) => {
+            if model.dfa_state.focus == DfaFocus::Definition {
+                model.dfa_state.focus = DfaFocus::WordInput;
+            } else {
+                model.dfa_state.focus = DfaFocus::Definition;
+            }
+        }
+        Msg::DfaMsg(DfaMsg::Eval) => {
+            let def = model.dfa_state.definition_textarea.lines().join("\n");
+            let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
+            match dfa {
+                Ok(dfa) => {
+                    let word = model.dfa_state.input_word_textarea.lines();
+                    let word = word.get(0).unwrap();
+                    model.dfa_state.result = Some(dfa.accepts(word));
+                }
+                Err(e) => (),
             }
         }
         Msg::NextTab => model.selected_topic = model.selected_topic.next(),

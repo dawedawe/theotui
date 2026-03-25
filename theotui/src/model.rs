@@ -71,13 +71,18 @@ pub(crate) struct SetTheoryModel<'a> {
     pub(crate) result: SetTheoryResult,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum DfaFocus {
+    #[default]
+    Definition,
+    WordInput,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct DfaModel<'a> {
-    pub(crate) alphabet_textarea: TextArea<'a>,
-    pub(crate) states_textarea: TextArea<'a>,
-    pub(crate) start_state_textarea: TextArea<'a>,
-    pub(crate) finish_states_textarea: TextArea<'a>,
-    pub(crate) transitions_textarea: TextArea<'a>,
+    pub(crate) definition_textarea: TextArea<'a>,
+    pub(crate) input_word_textarea: TextArea<'a>,
+    pub(crate) focus: DfaFocus,
     pub(crate) result: Option<bool>,
 }
 
