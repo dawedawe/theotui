@@ -1,17 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub mod parser {
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     use winnow::{
         ModalResult, Parser,
         ascii::multispace0,
         combinator::{cut_err, delimited, separated, trace},
-        error::{ContextError, ErrMode},
+        error::{ContextError, ErrMode, StrContext},
         token::{any, take_while},
     };
 
-    use crate::dfa::Dfa;
+    use crate::dfa::{Dfa, Symbol};
 
     fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
         trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
@@ -119,9 +119,33 @@ pub mod parser {
     ) -> ModalResult<Vec<(&'s str, char, &'s str)>> {
         let identifier = whitespace_wrapped("delta");
         let equals = whitespace_wrapped("=");
-        (identifier, equals, delta_set())
+        let r = (identifier, equals, delta_set())
             .map(|(_, _, x)| x)
-            .parse_next(input)
+            .parse_next(input);
+        match r {
+            Ok(delta) => {
+                let mut non_deterministic_delta = delta.iter().filter_map(|(s_in, sym, _)| {
+                    let filtered = delta.iter().filter(|(a, b, _)| (a, b) == (s_in, sym));
+                    if filtered.count() == 1 {
+                        None
+                    } else {
+                        Some((s_in, sym))
+                    }
+                });
+
+                if non_deterministic_delta.any(|_| true) {
+                    let mut context_error = ContextError::new();
+
+                    context_error.push(StrContext::Label(
+                        "The delta definition is non-deterministic.",
+                    ));
+                    Err(ErrMode::Cut(context_error))
+                } else {
+                    Ok(delta)
+                }
+            }
+            e => e,
+        }
     }
 
     /// Parse a [Dfa] definition
@@ -139,7 +163,7 @@ pub mod parser {
         let mut states: Option<HashSet<String>> = None;
         let mut start: Option<String> = None;
         let mut final_states: Option<HashSet<String>> = None;
-        let mut delta: Option<HashSet<(String, char, String)>> = None;
+        let mut delta: Option<HashMap<(String, Symbol), String>> = None;
 
         for line in lines {
             let mut line: &str = &line;
@@ -159,7 +183,7 @@ pub mod parser {
                 let r = parse_delta_definition(&mut line)?;
                 delta = Some(
                     r.into_iter()
-                        .map(|(s_in, sym, s_out)| (s_in.to_string(), sym, s_out.to_string()))
+                        .map(|(s_in, sym, s_out)| ((s_in.to_string(), sym), s_out.to_string()))
                         .collect(),
                 );
             } else {
@@ -167,13 +191,14 @@ pub mod parser {
             }
         }
 
-        Ok(Dfa {
-            states: states.expect("parsed S expected"),
-            sigma: sigma.expect("parsed Sigma expected"),
-            delta: delta.expect("parsed delta expected"),
-            final_states: final_states.expect("parsed F expected"),
-            start_state: start.expect("parsed start expected"),
-        })
+        Dfa::new(
+            states.expect("parsed S expected"),
+            sigma.expect("parsed Sigma expected"),
+            delta.expect("parsed delta expected"),
+            final_states.expect("parsed F expected"),
+            start.expect("parsed start expected"),
+        )
+        .map_err(|_| ErrMode::Cut(ContextError::default()))
     }
 }
 
@@ -184,7 +209,7 @@ type Symbol = char;
 pub struct Dfa {
     pub(crate) states: HashSet<State>,
     pub(crate) sigma: HashSet<Symbol>,
-    pub(crate) delta: HashSet<(State, Symbol, State)>,
+    pub(crate) delta: HashMap<(State, Symbol), State>,
     pub(crate) final_states: HashSet<State>,
     pub(crate) start_state: State,
 }
@@ -194,7 +219,7 @@ impl Dfa {
     pub fn new(
         states: HashSet<State>,
         sigma: HashSet<Symbol>,
-        delta: HashSet<(State, Symbol, State)>,
+        delta: HashMap<(State, Symbol), State>,
         final_states: HashSet<State>,
         start_state: State,
     ) -> Result<Self, String> {
@@ -208,7 +233,7 @@ impl Dfa {
 
         let (mut unknown_delta_states, mut unknown_delta_symbols) = delta.iter().fold(
             (vec![], vec![]),
-            |(mut acc1, mut acc2), (s_in, sym, s_out)| {
+            |(mut acc1, mut acc2), ((s_in, sym), s_out)| {
                 if !states.contains(s_in) {
                     acc1.push(s_in.as_str());
                 }
@@ -234,27 +259,6 @@ impl Dfa {
             unknown_delta_symbols.dedup();
             let s = unknown_delta_symbols.join(", ");
             let msg = format!("The delta relation contains the following unknown symbols: {s}");
-            return Err(msg);
-        }
-
-        let mut non_deterministic_delta = delta.iter().filter_map(|(s_in, sym, _)| {
-            let filtered = delta.iter().filter(|(a, b, _)| (a, b) == (s_in, sym));
-            if filtered.count() == 1 {
-                None
-            } else {
-                Some((s_in, sym))
-            }
-        });
-
-        if non_deterministic_delta.any(|_| true) {
-            let mut non_deterministic_inputs: Vec<String> = non_deterministic_delta
-                .map(|(state, sym)| format!("({state}, {sym})"))
-                .collect();
-            non_deterministic_inputs.sort();
-            non_deterministic_inputs.dedup();
-            let s = non_deterministic_inputs.join(", ");
-            let msg =
-                format!("The delta function is non-deterministic for the following inputs: {s}");
             return Err(msg);
         }
 
@@ -304,14 +308,10 @@ impl<'a> RunningDfa<'a> {
         match self.remaining_input.first() {
             None => false,
             Some(symbol) => {
-                let t = self
-                    .dfa
-                    .delta
-                    .iter()
-                    .find(|(curr, sym, _nxt)| curr == self.current_state && sym == symbol);
-                if let Some((_curr, sym, nxt)) = t {
-                    self.current_state = nxt;
-                    self.accepted_input.push(*sym);
+                let next_state = self.dfa.delta.get(&(self.current_state.clone(), *symbol));
+                if let Some(next_state) = next_state {
+                    self.current_state = next_state;
+                    self.accepted_input.push(*symbol);
                     self.remaining_input.remove(0);
                     true
                 } else {
@@ -336,7 +336,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("s0".into(), 'a', "s1".into())]),
+            HashMap::from([(("s0".into(), 'a'), "s1".into())]),
             HashSet::from(["s2".into()]),
             "s0".into(),
         )
@@ -353,7 +353,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("s0".into(), 'a', "s1".into())]),
+            HashMap::from([(("s0".into(), 'a'), "s1".into())]),
             HashSet::from(["s2".into()]),
             "sX".into(),
         );
@@ -365,7 +365,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("s0".into(), 'a', "s1".into())]),
+            HashMap::from([(("s0".into(), 'a'), "s1".into())]),
             HashSet::from(["s2".into(), "sX".into()]),
             "s0".into(),
         );
@@ -377,7 +377,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("sX".into(), 'a', "s1".into())]),
+            HashMap::from([(("sX".into(), 'a'), "s1".into())]),
             HashSet::from(["s2".into()]),
             "s0".into(),
         );
@@ -385,7 +385,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("s0".into(), 'a', "sX".into())]),
+            HashMap::from([(("s0".into(), 'a'), "sX".into())]),
             HashSet::from(["s2".into()]),
             "s0".into(),
         );
@@ -397,7 +397,7 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([("s0".into(), 'x', "s1".into())]),
+            HashMap::from([(("s0".into(), 'x'), "s1".into())]),
             HashSet::from(["s2".into()]),
             "s0".into(),
         );
@@ -405,26 +405,11 @@ mod tests {
     }
 
     #[test]
-    fn non_deterministic_delta_cant_be_created() {
-        let dfa = Dfa::new(
-            HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
-            HashSet::from(['a', 'b']),
-            HashSet::from([
-                ("s0".into(), 'a', "s1".into()),
-                ("s0".into(), 'a', "s2".into()),
-                ("s0".into(), 'b', "s1".into()),
-                ("s0".into(), 'b', "s2".into()),
-            ]),
-            HashSet::from(["s2".into()]),
-            "s0".into(),
-        );
-        match dfa {
-            Err(s) => assert_eq!(
-                s,
-                "The delta function is non-deterministic for the following inputs: (s0, a), (s0, b)"
-            ),
-            _ => panic!("expected Err"),
-        }
+    fn parsing_non_deterministic_delta_should_fail() {
+        let mut s = "delta = { (s0, 'a', s1), (s0, 'a', s2), (s0, 'b', s1), (s0, 'b', s2) }";
+        let r = parser::parse_delta_definition(&mut s);
+        assert!(r.is_err());
+        assert!(r.unwrap_err().to_string().contains("non-deterministic"));
     }
 
     #[test]
@@ -432,9 +417,9 @@ mod tests {
         let dfa = Dfa::new(
             HashSet::from(["s0".into(), "s1".into(), "s2".into()]),
             HashSet::from(['a', 'b']),
-            HashSet::from([
-                ("s0".into(), 'a', "s1".into()),
-                ("s1".into(), 'b', "s2".into()),
+            HashMap::from([
+                (("s0".into(), 'a'), "s1".into()),
+                (("s1".into(), 'b'), "s2".into()),
             ]),
             HashSet::from(["s2".into()]),
             "s0".into(),
@@ -526,9 +511,9 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
         assert_eq!(dfa.final_states, HashSet::from_iter(["s2".into()]));
         assert_eq!(
             dfa.delta,
-            HashSet::from_iter([
-                ("s0".into(), 'a', "s1".into()),
-                ("s1".into(), 'b', "s2".into())
+            HashMap::from_iter([
+                (("s0".into(), 'a'), "s1".into()),
+                (("s1".into(), 'b'), "s2".into())
             ])
         );
         assert!(dfa.accepts("ab"));
