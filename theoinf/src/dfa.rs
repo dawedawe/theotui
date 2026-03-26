@@ -185,6 +185,15 @@ pub mod parser {
             }
         }
 
+        if sigma.is_none()
+            || states.is_none()
+            || start.is_none()
+            || final_states.is_none()
+            || delta.is_none()
+        {
+            return Err(ErrMode::Cut(ContextError::default()));
+        }
+
         Dfa::new(
             states.expect("parsed S expected"),
             sigma.expect("parsed Sigma expected"),
@@ -512,5 +521,18 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
         );
         assert!(dfa.accepts("ab"));
         assert!(!dfa.accepts("abc"));
+    }
+
+    #[test]
+    fn parse_dfa_definition_with_missing_but_duplicated_parts_should_fail() {
+        let mut s = "
+Sigma = { 'a', 'b'  }
+S = { s0, s1, s2 }
+Sigma = { 'a', 'b'  }
+F = { s2  }
+delta = { (s0, 'a', s1), (s1, 'b', s2) }
+";
+        let r = parser::parse_dfa_definition(&mut s);
+        assert!(r.is_err());
     }
 }
