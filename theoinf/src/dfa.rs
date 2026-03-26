@@ -124,18 +124,12 @@ pub mod parser {
             .parse_next(input);
         match r {
             Ok(delta) => {
-                let mut non_deterministic_delta = delta.iter().filter_map(|(s_in, sym, _)| {
-                    let filtered = delta.iter().filter(|(a, b, _)| (a, b) == (s_in, sym));
-                    if filtered.count() == 1 {
-                        None
-                    } else {
-                        Some((s_in, sym))
-                    }
-                });
-
-                if non_deterministic_delta.any(|_| true) {
+                let mut delta_inputs = HashSet::new();
+                if delta
+                    .iter()
+                    .any(|(s_in, sym, _)| !delta_inputs.insert((s_in, sym)))
+                {
                     let mut context_error = ContextError::new();
-
                     context_error.push(StrContext::Label(
                         "The delta definition is non-deterministic.",
                     ));
