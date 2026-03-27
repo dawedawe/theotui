@@ -143,14 +143,14 @@ pub mod parser {
     }
 
     /// Parse a [Dfa] definition
-    pub fn parse_dfa_definition(input: &mut &str) -> ModalResult<Dfa> {
+    pub fn parse_dfa_definition(input: &mut &str) -> Result<Dfa, String> {
         let lines: Vec<String> = input
             .lines()
             .map(|l| l.trim().to_string())
             .filter(|l| !l.is_empty())
             .collect();
         if lines.len() != 5 {
-            return Err(ErrMode::Cut(ContextError::default()));
+            return Err("Incomplete definition".into());
         }
 
         let mut sigma: Option<HashSet<char>> = None;
@@ -162,26 +162,31 @@ pub mod parser {
         for line in lines {
             let mut line: &str = &line;
             if line.starts_with("Sigma") {
-                let r = parse_sigma_definition(&mut line)?;
+                let r =
+                    parse_sigma_definition(&mut line).map_err(|_| "Invalid 'Sigma' definition.")?;
                 sigma = Some(r.into_iter().collect());
             } else if line.starts_with("start") {
-                let r = parse_start_state_definition(&mut line)?;
+                let r = parse_start_state_definition(&mut line)
+                    .map_err(|_| "Invalid 'start' definition.")?;
                 start = Some(r.to_string());
-            } else if line.starts_with("S=") || line.starts_with("S ") {
-                let r = parse_states_definition(&mut line)?;
+            } else if line.starts_with("S") {
+                let r =
+                    parse_states_definition(&mut line).map_err(|_| "Invalid 'S' definition.")?;
                 states = Some(r.into_iter().map(|s| s.to_string()).collect());
             } else if line.starts_with("F") {
-                let r = parse_final_states_definition(&mut line)?;
+                let r = parse_final_states_definition(&mut line)
+                    .map_err(|_| "Invalid 'F' definition.")?;
                 final_states = Some(r.into_iter().map(|s| s.to_string()).collect());
             } else if line.starts_with("delta") {
-                let r = parse_delta_definition(&mut line)?;
+                let r =
+                    parse_delta_definition(&mut line).map_err(|_| "Invalid 'delta' definition.")?;
                 delta = Some(
                     r.into_iter()
                         .map(|(s_in, sym, s_out)| ((s_in.to_string(), sym), s_out.to_string()))
                         .collect(),
                 );
             } else {
-                return Err(ErrMode::Cut(ContextError::default()));
+                return Err(format!("Can't parse line '{line}'."));
             }
         }
 
@@ -191,7 +196,7 @@ pub mod parser {
             || final_states.is_none()
             || delta.is_none()
         {
-            return Err(ErrMode::Cut(ContextError::default()));
+            return Err("Incomplete definition".into());
         }
 
         Dfa::new(
@@ -201,7 +206,6 @@ pub mod parser {
             final_states.expect("parsed F expected"),
             start.expect("parsed start expected"),
         )
-        .map_err(|_| ErrMode::Cut(ContextError::default()))
     }
 }
 
@@ -227,26 +231,26 @@ impl Dfa {
         start_state: State,
     ) -> Result<Self, String> {
         if !states.contains(&start_state) {
-            return Err("The start state must be contained in the states set.".into());
+            return Err("start must be an element of S.".into());
         }
 
         if !final_states.is_subset(&states) {
-            return Err("The final states must be contained in the states set.".into());
+            return Err("F must be a subset of S.".into());
         }
 
         let (mut unknown_delta_states, mut unknown_delta_symbols) = delta.iter().fold(
             (vec![], vec![]),
-            |(mut acc1, mut acc2), ((s_in, sym), s_out)| {
+            |(mut unknown_states, mut unknown_symbols), ((s_in, sym), s_out)| {
                 if !states.contains(s_in) {
-                    acc1.push(s_in.as_str());
+                    unknown_states.push(s_in.as_str());
                 }
                 if !states.contains(s_out) {
-                    acc1.push(s_out.as_str());
+                    unknown_states.push(s_out.as_str());
                 }
                 if !sigma.contains(sym) {
-                    acc2.push(sym.to_string());
+                    unknown_symbols.push(sym.to_string());
                 }
-                (acc1, acc2)
+                (unknown_states, unknown_symbols)
             },
         );
         if !unknown_delta_states.is_empty() {

@@ -108,20 +108,18 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             model.running = false;
         }
         Msg::PropLogicMsg(PropLogicMsg::FilterFalseRows) => {
-            match model.proplogic_state.result_filter {
-                Some(PropLogicResultFilter::OnlyFalse) => {
-                    model.proplogic_state.result_filter = None
-                }
+            model.proplogic_state.result_filter = match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyFalse) => None,
                 Some(PropLogicResultFilter::OnlyTrue) | None => {
-                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyFalse)
+                    Some(PropLogicResultFilter::OnlyFalse)
                 }
             }
         }
         Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows) => {
-            match model.proplogic_state.result_filter {
-                Some(PropLogicResultFilter::OnlyTrue) => model.proplogic_state.result_filter = None,
+            model.proplogic_state.result_filter = match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyTrue) => None,
                 Some(PropLogicResultFilter::OnlyFalse) | None => {
-                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyTrue)
+                    Some(PropLogicResultFilter::OnlyTrue)
                 }
             }
         }
@@ -143,9 +141,9 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                         model.proplogic_state.formula_input_state.value.as_str(),
                         &assignment,
                     );
-                    match r {
-                        Ok(r) => model.proplogic_state.result = PropLogicResult::Literal(r),
-                        Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
+                    model.proplogic_state.result = match r {
+                        Ok(r) => PropLogicResult::Literal(r),
+                        Err(e) => PropLogicResult::Error(e),
                     }
                 }
                 Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
@@ -192,28 +190,28 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::SetTheoryMsg(SetTheoryMsg::Eval) => {
             let terms = model.settheory_state.term_textarea.lines().join("\n");
             let r = theoinf::set_theory::run(terms.as_str());
-            match r {
-                Ok(expr) => model.settheory_state.result = SetTheoryResult::Expr(expr),
-                Err(e) => model.settheory_state.result = SetTheoryResult::Error(e),
+            model.settheory_state.result = match r {
+                Ok(expr) => SetTheoryResult::Expr(expr),
+                Err(e) => SetTheoryResult::Error(e),
             }
         }
         Msg::DfaMsg(DfaMsg::FocusNext) => {
-            if model.dfa_state.focus == DfaFocus::Definition {
-                model.dfa_state.focus = DfaFocus::WordInput;
+            model.dfa_state.focus = if model.dfa_state.focus == DfaFocus::Definition {
+                DfaFocus::WordInput
             } else {
-                model.dfa_state.focus = DfaFocus::Definition;
+                DfaFocus::Definition
             }
         }
         Msg::DfaMsg(DfaMsg::Eval) => {
             let def = model.dfa_state.definition_textarea.lines().join("\n");
             let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
-            match dfa {
+            model.dfa_state.result = match dfa {
                 Ok(dfa) => {
                     let word = model.dfa_state.input_word_textarea.lines();
                     let word = word.first().map(|w| w.deref()).unwrap_or("");
-                    model.dfa_state.result = dfa.accepts(word).to_string();
+                    dfa.accepts(word).to_string()
                 }
-                Err(e) => model.dfa_state.result = e.to_string(),
+                Err(e) => e,
             }
         }
         Msg::NextTab => model.selected_topic = model.selected_topic.next(),
