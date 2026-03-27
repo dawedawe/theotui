@@ -167,7 +167,7 @@ pub mod parser {
             } else if line.starts_with("start") {
                 let r = parse_start_state_definition(&mut line)?;
                 start = Some(r.to_string());
-            } else if line.starts_with("S") {
+            } else if line.starts_with("S=") || line.starts_with("S ") {
                 let r = parse_states_definition(&mut line)?;
                 states = Some(r.into_iter().map(|s| s.to_string()).collect());
             } else if line.starts_with("F") {
@@ -272,6 +272,26 @@ impl Dfa {
             final_states,
             start_state,
         })
+    }
+
+    pub fn sigma(&self) -> &HashSet<Symbol> {
+        &self.sigma
+    }
+
+    pub fn states(&self) -> &HashSet<State> {
+        &self.states
+    }
+
+    pub fn start_state(&self) -> &State {
+        &self.start_state
+    }
+
+    pub fn final_states(&self) -> &HashSet<State> {
+        &self.final_states
+    }
+
+    pub fn delta(&self) -> &HashMap<(State, Symbol), State> {
+        &self.delta
     }
 
     /// The [Dfa] accepts the given word.
@@ -472,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_empty_final_states_should_fail() {
+    fn parse_empty_final_states_works() {
         let mut s = "F = {   } ";
         let states = parser::parse_final_states_definition(&mut s).unwrap();
         assert!(states.is_empty());

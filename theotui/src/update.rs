@@ -5,7 +5,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Deref};
 use theoinf::{
     dfa,
     propositional_logic::{Assignment, run},
@@ -210,10 +210,10 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             match dfa {
                 Ok(dfa) => {
                     let word = model.dfa_state.input_word_textarea.lines();
-                    let word = word.get(0).unwrap();
-                    model.dfa_state.result = Some(dfa.accepts(word));
+                    let word = word.first().map(|w| w.deref()).unwrap_or("");
+                    model.dfa_state.result = dfa.accepts(word).to_string();
                 }
-                Err(e) => (),
+                Err(e) => model.dfa_state.result = e.to_string(),
             }
         }
         Msg::NextTab => model.selected_topic = model.selected_topic.next(),
