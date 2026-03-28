@@ -1,10 +1,15 @@
-use crate::model::{Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult};
+use crate::model::{
+    DfaFocus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult,
+};
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
-use std::collections::HashMap;
-use theoinf::propositional_logic::{Assignment, run};
+use std::{collections::HashMap, ops::Deref};
+use theoinf::{
+    dfa,
+    propositional_logic::{Assignment, run},
+};
 use tui_input::{Input, backend::crossterm::EventHandler};
 
 pub(crate) enum PropLogicMsg {
@@ -19,12 +24,18 @@ pub(crate) enum SetTheoryMsg {
     Eval,
 }
 
+pub(crate) enum DfaMsg {
+    Eval,
+    FocusNext,
+}
+
 pub(crate) enum Msg {
     Exit,
     NextTab,
     PrevTab,
     PropLogicMsg(PropLogicMsg),
     SetTheoryMsg(SetTheoryMsg),
+    DfaMsg(DfaMsg),
     ToggleHelp,
 }
 
@@ -75,6 +86,19 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             model.settheory_state.term_textarea.input(key);
             None
         }
+        (SelectedTopic::Dfa, KeyCode::F(2)) => Some(Msg::DfaMsg(DfaMsg::FocusNext)),
+        (SelectedTopic::Dfa, KeyCode::F(5)) => Some(Msg::DfaMsg(DfaMsg::Eval)),
+        (SelectedTopic::Dfa, _) => {
+            match model.dfa_state.focus {
+                crate::model::DfaFocus::Definition => {
+                    model.dfa_state.definition_textarea.input(key);
+                }
+                crate::model::DfaFocus::WordInput => {
+                    model.dfa_state.input_word_textarea.input(key);
+                }
+            }
+            None
+        }
     }
 }
 
@@ -84,20 +108,18 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             model.running = false;
         }
         Msg::PropLogicMsg(PropLogicMsg::FilterFalseRows) => {
-            match model.proplogic_state.result_filter {
-                Some(PropLogicResultFilter::OnlyFalse) => {
-                    model.proplogic_state.result_filter = None
-                }
+            model.proplogic_state.result_filter = match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyFalse) => None,
                 Some(PropLogicResultFilter::OnlyTrue) | None => {
-                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyFalse)
+                    Some(PropLogicResultFilter::OnlyFalse)
                 }
             }
         }
         Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows) => {
-            match model.proplogic_state.result_filter {
-                Some(PropLogicResultFilter::OnlyTrue) => model.proplogic_state.result_filter = None,
+            model.proplogic_state.result_filter = match model.proplogic_state.result_filter {
+                Some(PropLogicResultFilter::OnlyTrue) => None,
                 Some(PropLogicResultFilter::OnlyFalse) | None => {
-                    model.proplogic_state.result_filter = Some(PropLogicResultFilter::OnlyTrue)
+                    Some(PropLogicResultFilter::OnlyTrue)
                 }
             }
         }
@@ -119,9 +141,9 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                         model.proplogic_state.formula_input_state.value.as_str(),
                         &assignment,
                     );
-                    match r {
-                        Ok(r) => model.proplogic_state.result = PropLogicResult::Literal(r),
-                        Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
+                    model.proplogic_state.result = match r {
+                        Ok(r) => PropLogicResult::Literal(r),
+                        Err(e) => PropLogicResult::Error(e),
                     }
                 }
                 Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
@@ -168,9 +190,28 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::SetTheoryMsg(SetTheoryMsg::Eval) => {
             let terms = model.settheory_state.term_textarea.lines().join("\n");
             let r = theoinf::set_theory::run(terms.as_str());
-            match r {
-                Ok(expr) => model.settheory_state.result = SetTheoryResult::Expr(expr),
-                Err(e) => model.settheory_state.result = SetTheoryResult::Error(e),
+            model.settheory_state.result = match r {
+                Ok(expr) => SetTheoryResult::Expr(expr),
+                Err(e) => SetTheoryResult::Error(e),
+            }
+        }
+        Msg::DfaMsg(DfaMsg::FocusNext) => {
+            model.dfa_state.focus = if model.dfa_state.focus == DfaFocus::Definition {
+                DfaFocus::WordInput
+            } else {
+                DfaFocus::Definition
+            }
+        }
+        Msg::DfaMsg(DfaMsg::Eval) => {
+            let def = model.dfa_state.definition_textarea.lines().join("\n");
+            let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
+            model.dfa_state.result = match dfa {
+                Ok(dfa) => {
+                    let word = model.dfa_state.input_word_textarea.lines();
+                    let word = word.first().map(|w| w.deref()).unwrap_or("");
+                    dfa.accepts(word).to_string()
+                }
+                Err(e) => e,
             }
         }
         Msg::NextTab => model.selected_topic = model.selected_topic.next(),
