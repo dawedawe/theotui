@@ -1,4 +1,4 @@
-use crate::model::{Model, PropLogicResultFilter, SelectedTopic};
+use crate::model::{DfaFocus, Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -49,6 +49,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
     match model.selected_topic {
         SelectedTopic::SetTheory => render_settheory(frame, topics_content_rect, model),
         SelectedTopic::PropositionalLogic => render_proplogic(frame, topics_content_rect, model),
+        SelectedTopic::Dfa => render_dfa(frame, topics_content_rect, model),
     }
 }
 
@@ -111,7 +112,7 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     match &model.settheory_state.result {
         &crate::model::SetTheoryResult::None => (),
         crate::model::SetTheoryResult::Error(e) => {
-            let result_paragraph = Paragraph::new(e.clone())
+            let result_paragraph = Paragraph::new(e.as_str())
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
             frame.render_widget(result_paragraph, result_rect);
@@ -144,7 +145,7 @@ A == B            // equality
     }
 
     // render key bindings
-    let msg = vec![
+    let key_bindings = vec![
         Span::raw("Next topic: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
@@ -154,9 +155,9 @@ A == B            // equality
         Span::raw("Exit: "),
         Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
     ];
-    let text = Text::from(Line::from(msg)).style(default_style);
-    let help_message = Paragraph::new(text);
-    frame.render_widget(help_message, key_bindings_rect);
+    let key_bindings_text = Text::from(Line::from(key_bindings)).style(default_style);
+    let key_bindings_paragraph = Paragraph::new(key_bindings_text);
+    frame.render_widget(key_bindings_paragraph, key_bindings_rect);
 }
 
 fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
@@ -224,7 +225,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
     match &model.proplogic_state.result {
         crate::model::PropLogicResult::None => (),
         crate::model::PropLogicResult::Error(e) => {
-            let result_paragraph = Paragraph::new(e.clone())
+            let result_paragraph = Paragraph::new(e.as_str())
                 .style(default_style)
                 .block(Block::default().borders(Borders::ALL).title(" Result "));
             frame.render_widget(result_paragraph, result_rect);
@@ -379,7 +380,7 @@ p -> q  // implication";
     }
 
     // render key bindings
-    let msg = vec![
+    let key_bindings = vec![
         Span::raw("Next topic: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
@@ -395,9 +396,128 @@ p -> q  // implication";
         Span::raw("Exit: "),
         Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
     ];
-    let text = Text::from(Line::from(msg)).style(default_style);
-    let help_message = Paragraph::new(text);
-    frame.render_widget(help_message, key_bindings_rect);
+    let key_bindings_text = Text::from(Line::from(key_bindings)).style(default_style);
+    let key_bindings_paragraph = Paragraph::new(key_bindings_text);
+    frame.render_widget(key_bindings_paragraph, key_bindings_rect);
+}
+
+fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    let default_style = default_style();
+
+    let main_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(1),    // definition, input word
+                Constraint::Length(1), // key bindings
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let key_bindings_rect = main_vert_split[1];
+    let (non_help_rect, help_rect) = if model.show_help {
+        let halfs = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(main_vert_split[0]);
+        (halfs[0], halfs[1])
+    } else {
+        (main_vert_split[0], Rect::default())
+    };
+
+    let sub_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(7),    // definition
+                Constraint::Length(3), // input word
+                Constraint::Length(3), // result
+            ]
+            .as_ref(),
+        )
+        .split(non_help_rect);
+
+    let definition_rect = sub_vert_split[0];
+    let word_input_rect = sub_vert_split[1];
+    let result_rect = sub_vert_split[2];
+
+    model
+        .dfa_state
+        .definition_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .dfa_state
+        .input_word_textarea
+        .set_cursor_line_style(default_style);
+
+    // render definition textarea
+    let definition_block = Block::default().borders(Borders::ALL).style(default_style);
+    let definition_block = if model.dfa_state.focus == DfaFocus::Definition {
+        definition_block
+            .title(" Definition* ")
+            .title_style(default_style.bold())
+    } else {
+        definition_block.title(" Definition ")
+    };
+    frame.render_widget(definition_block, definition_rect);
+    let definition_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(definition_rect);
+    frame.render_widget(&model.dfa_state.definition_textarea, definition_rect[0]);
+
+    // render word input textarea
+    let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
+    let word_input_block = if model.dfa_state.focus == DfaFocus::WordInput {
+        word_input_block
+            .title(" Word* ")
+            .title_style(default_style.bold())
+    } else {
+        word_input_block.title(" Word ")
+    };
+    frame.render_widget(word_input_block, word_input_rect);
+    let word_input_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(word_input_rect);
+    frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect[0]);
+
+    // render result
+    let result_paragraph = Paragraph::new(model.dfa_state.result.as_str())
+        .style(default_style)
+        .block(Block::default().borders(Borders::ALL).title(" Result "));
+    frame.render_widget(result_paragraph, result_rect);
+
+    // render help if toggled
+    if model.show_help {
+        let help = "Sigma = { 'a', 'b' }                     // the set of the alphabet symbols
+S = { s0, s1, s2 }                       // the set of states
+start = s0                               // the start state
+F = { s2  }                              // the set of final states
+delta = { (s0, 'a', s1), (s1, 'b', s2) } // the set of state transitions of the delta function";
+        let help_paragraph = Paragraph::new(help)
+            .style(default_style)
+            .block(Block::default().borders(Borders::ALL).title(" Help "));
+        frame.render_widget(help_paragraph, help_rect);
+    }
+
+    // render key bindings
+    let key_bindings = vec![
+        Span::raw("Next topic: "),
+        Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Focus next input: "),
+        Span::styled("F2 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Evaluate: "),
+        Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Help: "),
+        Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Exit: "),
+        Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
+    ];
+    let key_bindings_text = Text::from(Line::from(key_bindings)).style(default_style);
+    let key_bindings_paragraph = Paragraph::new(key_bindings_text);
+    frame.render_widget(key_bindings_paragraph, key_bindings_rect);
 }
 
 fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarState) {

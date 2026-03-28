@@ -15,6 +15,8 @@ pub(crate) enum SelectedTopic {
     SetTheory,
     #[strum(to_string = "Propositional Logic")]
     PropositionalLogic,
+    #[strum(to_string = "DFA")]
+    Dfa,
 }
 
 impl SelectedTopic {
@@ -69,12 +71,41 @@ pub(crate) struct SetTheoryModel<'a> {
     pub(crate) result: SetTheoryResult,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum DfaFocus {
+    #[default]
+    Definition,
+    WordInput,
+}
+
+#[derive(Debug)]
+pub(crate) struct DfaModel<'a> {
+    pub(crate) definition_textarea: TextArea<'a>,
+    pub(crate) input_word_textarea: TextArea<'a>,
+    pub(crate) focus: DfaFocus,
+    pub(crate) result: String,
+}
+
+impl<'a> Default for DfaModel<'a> {
+    fn default() -> Self {
+        let mut default_def: TextArea<'a> = Default::default();
+        default_def.insert_str("Sigma = { 'a', 'b' }\nS = { s0, s1, s2 }\nstart = s0\nF = { s2 }\ndelta = { (s0, 'a', s1), (s1, 'b', s2) }");
+        Self {
+            definition_textarea: default_def,
+            input_word_textarea: Default::default(),
+            focus: Default::default(),
+            result: Default::default(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct Model<'a> {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) proplogic_state: PropositionalLogicModel,
     pub(crate) settheory_state: SetTheoryModel<'a>,
+    pub(crate) dfa_state: DfaModel<'a>,
     pub(crate) show_help: bool,
 }
 
@@ -85,6 +116,7 @@ impl<'a> Default for Model<'a> {
             selected_topic: SelectedTopic::default(),
             proplogic_state: Default::default(),
             settheory_state: Default::default(),
+            dfa_state: Default::default(),
             show_help: Default::default(),
         }
     }
