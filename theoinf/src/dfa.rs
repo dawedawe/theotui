@@ -190,22 +190,13 @@ pub mod parser {
             }
         }
 
-        if sigma.is_none()
-            || states.is_none()
-            || start.is_none()
-            || final_states.is_none()
-            || delta.is_none()
+        if let (Some(sigma), Some(states), Some(start), Some(final_states), Some(delta)) =
+            (sigma, states, start, final_states, delta)
         {
-            return Err("Incomplete definition".into());
+            Dfa::new(states, sigma, delta, final_states, start)
+        } else {
+            Err("Incomplete definition".into())
         }
-
-        Dfa::new(
-            states.expect("parsed S expected"),
-            sigma.expect("parsed Sigma expected"),
-            delta.expect("parsed delta expected"),
-            final_states.expect("parsed F expected"),
-            start.expect("parsed start expected"),
-        )
     }
 }
 
@@ -313,10 +304,10 @@ impl Dfa {
 
 /// Models a running [Dfa].
 pub struct RunningDfa<'a> {
-    pub dfa: &'a Dfa,
-    pub current_state: &'a State,
-    pub remaining_input: Vec<Symbol>,
-    pub accepted_input: Vec<Symbol>,
+    pub(crate) dfa: &'a Dfa,
+    pub(crate) current_state: &'a State,
+    pub(crate) remaining_input: Vec<Symbol>,
+    pub(crate) accepted_input: Vec<Symbol>,
 }
 
 impl<'a> RunningDfa<'a> {
