@@ -1,5 +1,5 @@
 use crate::model::{
-    DfaFocus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult,
+    DfaFocus, Focus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult,
 };
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
@@ -26,13 +26,14 @@ pub(crate) enum SetTheoryMsg {
 
 pub(crate) enum DfaMsg {
     Eval,
-    FocusNext,
 }
 
 pub(crate) enum Msg {
     Exit,
     NextTab,
     PrevTab,
+    NextFocus,
+    PrevFocus,
     PropLogicMsg(PropLogicMsg),
     SetTheoryMsg(SetTheoryMsg),
     DfaMsg(DfaMsg),
@@ -51,19 +52,23 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     match (model.selected_topic, key.code) {
         (_, KeyCode::Esc) => Some(Msg::Exit),
         (_, KeyCode::F(1)) => Some(Msg::ToggleHelp),
+        (_, KeyCode::Down) if model.focus == Focus::TopicList => Some(Msg::NextTab),
+        (_, KeyCode::Up) if model.focus == Focus::TopicList => Some(Msg::PrevTab),
+        (_, KeyCode::Tab) => Some(Msg::NextFocus),
+        (_, KeyCode::BackTab) => Some(Msg::PrevFocus),
         (SelectedTopic::PropositionalLogic, KeyCode::Enter)
         | (SelectedTopic::PropositionalLogic, KeyCode::F(5)) => {
             Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
         }
-        (SelectedTopic::PropositionalLogic, KeyCode::Up) => {
+        (SelectedTopic::PropositionalLogic, KeyCode::Up) if model.focus == Focus::TopicContent => {
             Some(Msg::PropLogicMsg(PropLogicMsg::ScrollUp))
         }
-        (SelectedTopic::PropositionalLogic, KeyCode::Down) => {
+        (SelectedTopic::PropositionalLogic, KeyCode::Down)
+            if model.focus == Focus::TopicContent =>
+        {
             Some(Msg::PropLogicMsg(PropLogicMsg::ScrollDown))
         }
         (SelectedTopic::SetTheory, KeyCode::F(5)) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
-        (_, KeyCode::Tab) => Some(Msg::NextTab),
-        (_, KeyCode::BackTab) => Some(Msg::PrevTab),
         (SelectedTopic::PropositionalLogic, KeyCode::Char('f'))
             if key.modifiers.intersects(KeyModifiers::CONTROL) =>
         {
@@ -74,7 +79,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         {
             Some(Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows))
         }
-        (SelectedTopic::PropositionalLogic, _) => {
+        (SelectedTopic::PropositionalLogic, _) if model.focus == Focus::TopicContent => {
             let mut tmp_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
                 .with_cursor(model.proplogic_state.formula_input_state.cursor);
             tmp_input.handle_event(&Event::Key(key));
@@ -82,11 +87,10 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             model.proplogic_state.formula_input_state.value = tmp_input.value().into();
             None
         }
-        (SelectedTopic::SetTheory, _) => {
+        (SelectedTopic::SetTheory, _) if model.focus == Focus::TopicContent => {
             model.settheory_state.term_textarea.input(key);
             None
         }
-        (SelectedTopic::Dfa, KeyCode::F(2)) => Some(Msg::DfaMsg(DfaMsg::FocusNext)),
         (SelectedTopic::Dfa, KeyCode::F(5)) => Some(Msg::DfaMsg(DfaMsg::Eval)),
         (SelectedTopic::Dfa, _) => {
             match model.dfa_state.focus {
@@ -99,6 +103,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             }
             None
         }
+        _ => None,
     }
 }
 
@@ -107,6 +112,49 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::Exit => {
             model.running = false;
         }
+        Msg::NextTab => model.selected_topic = model.selected_topic.next(),
+        Msg::PrevTab => model.selected_topic = model.selected_topic.previous(),
+        Msg::ToggleHelp => model.show_help = !model.show_help,
+        Msg::NextFocus => match model.selected_topic {
+            SelectedTopic::SetTheory => match model.focus {
+                Focus::TopicList => model.focus = Focus::TopicContent,
+                Focus::TopicContent => model.focus = Focus::TopicList,
+            },
+            SelectedTopic::PropositionalLogic => match model.focus {
+                Focus::TopicList => model.focus = Focus::TopicContent,
+                Focus::TopicContent => model.focus = Focus::TopicList,
+            },
+            SelectedTopic::Dfa => match model.focus {
+                Focus::TopicList => {
+                    model.focus = Focus::TopicContent;
+                    model.dfa_state.focus = DfaFocus::Definition
+                }
+                Focus::TopicContent => match model.dfa_state.focus {
+                    DfaFocus::Definition => model.dfa_state.focus = DfaFocus::WordInput,
+                    DfaFocus::WordInput => model.focus = Focus::TopicList,
+                },
+            },
+        },
+        Msg::PrevFocus => match model.selected_topic {
+            SelectedTopic::SetTheory => match model.focus {
+                Focus::TopicList => model.focus = Focus::TopicContent,
+                Focus::TopicContent => model.focus = Focus::TopicList,
+            },
+            SelectedTopic::PropositionalLogic => match model.focus {
+                Focus::TopicList => model.focus = Focus::TopicContent,
+                Focus::TopicContent => model.focus = Focus::TopicList,
+            },
+            SelectedTopic::Dfa => match model.focus {
+                Focus::TopicList => {
+                    model.focus = Focus::TopicContent;
+                    model.dfa_state.focus = DfaFocus::WordInput
+                }
+                Focus::TopicContent => match model.dfa_state.focus {
+                    DfaFocus::Definition => model.focus = Focus::TopicList,
+                    DfaFocus::WordInput => model.dfa_state.focus = DfaFocus::Definition,
+                },
+            },
+        },
         Msg::PropLogicMsg(PropLogicMsg::FilterFalseRows) => {
             model.proplogic_state.result_filter = match model.proplogic_state.result_filter {
                 Some(PropLogicResultFilter::OnlyFalse) => None,
@@ -195,13 +243,6 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => SetTheoryResult::Error(e),
             }
         }
-        Msg::DfaMsg(DfaMsg::FocusNext) => {
-            model.dfa_state.focus = if model.dfa_state.focus == DfaFocus::Definition {
-                DfaFocus::WordInput
-            } else {
-                DfaFocus::Definition
-            }
-        }
         Msg::DfaMsg(DfaMsg::Eval) => {
             let def = model.dfa_state.definition_textarea.lines().join("\n");
             let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
@@ -214,8 +255,5 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => e,
             }
         }
-        Msg::NextTab => model.selected_topic = model.selected_topic.next(),
-        Msg::PrevTab => model.selected_topic = model.selected_topic.previous(),
-        Msg::ToggleHelp => model.show_help = !model.show_help,
     }
 }
