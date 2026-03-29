@@ -1,4 +1,4 @@
-use crate::model::{DfaFocus, Model, PropLogicResultFilter, SelectedTopic};
+use crate::model::{DfaFocus, Focus, Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -35,7 +35,11 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
 
     // render topic list
     let items = SelectedTopic::iter().map(|t| t.to_string());
-    let highlight_style = default_style.bold();
+    let highlight_style = if model.focus == Focus::TopicList {
+        default_style.bold().bg(Color::Green).fg(Color::Black)
+    } else {
+        default_style.bold()
+    };
     let selected_tab_index = model.selected_topic as usize;
     let topic_list = List::new(items)
         .style(default_style)
@@ -92,11 +96,14 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let term_rect = sub_vert_split[0];
     let result_rect = sub_vert_split[1];
 
-    let editor_block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Term ")
-        .style(default_style);
-
+    let editor_block = Block::default().borders(Borders::ALL).style(default_style);
+    let editor_block = if model.focus == Focus::TopicContent {
+        editor_block
+            .title(" Term* ")
+            .title_style(default_style.bold())
+    } else {
+        editor_block.title(" Term ")
+    };
     frame.render_widget(editor_block, term_rect);
     let editor_rect = Layout::default()
         .margin(1)
@@ -146,7 +153,7 @@ A == B            // equality
 
     // render key bindings
     let key_bindings = vec![
-        Span::raw("Next topic: "),
+        Span::raw("Switch focus: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
         Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
@@ -206,10 +213,18 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .with_cursor(model.proplogic_state.formula_input_state.cursor);
     let formula_width = formula_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
     let formula_scroll = formula_input.visual_scroll(formula_width as usize);
+    let formula_block = Block::default().borders(Borders::ALL);
+    let formula_block = if model.focus == Focus::TopicContent {
+        formula_block
+            .title(" Formula φ* ")
+            .title_style(default_style.bold())
+    } else {
+        formula_block.title(" Formula φ ")
+    };
     let formula_paragraph = Paragraph::new(formula_input.value())
         .style(default_style)
         .scroll((0, formula_scroll as u16))
-        .block(Block::default().borders(Borders::ALL).title(" Formula φ "));
+        .block(formula_block);
     frame.render_widget(formula_paragraph, formula_rect);
 
     frame.set_cursor_position((
@@ -381,7 +396,7 @@ p -> q  // implication";
 
     // render key bindings
     let key_bindings = vec![
-        Span::raw("Next topic: "),
+        Span::raw("Switch focus: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
         Span::styled("F5,Enter | ", Style::default().add_modifier(Modifier::BOLD)),
@@ -453,13 +468,14 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     // render definition textarea
     let definition_block = Block::default().borders(Borders::ALL).style(default_style);
-    let definition_block = if model.dfa_state.focus == DfaFocus::Definition {
-        definition_block
-            .title(" Definition* ")
-            .title_style(default_style.bold())
-    } else {
-        definition_block.title(" Definition ")
-    };
+    let definition_block =
+        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Definition {
+            definition_block
+                .title(" Definition* ")
+                .title_style(default_style.bold())
+        } else {
+            definition_block.title(" Definition ")
+        };
     frame.render_widget(definition_block, definition_rect);
     let definition_rect = Layout::default()
         .margin(1)
@@ -469,13 +485,14 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     // render word input textarea
     let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let word_input_block = if model.dfa_state.focus == DfaFocus::WordInput {
-        word_input_block
-            .title(" Word* ")
-            .title_style(default_style.bold())
-    } else {
-        word_input_block.title(" Word ")
-    };
+    let word_input_block =
+        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::WordInput {
+            word_input_block
+                .title(" Word* ")
+                .title_style(default_style.bold())
+        } else {
+            word_input_block.title(" Word ")
+        };
     frame.render_widget(word_input_block, word_input_rect);
     let word_input_rect = Layout::default()
         .margin(1)
@@ -504,10 +521,8 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) } // the set of state transitions of the 
 
     // render key bindings
     let key_bindings = vec![
-        Span::raw("Next topic: "),
+        Span::raw("Switch focus: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw("Focus next input: "),
-        Span::styled("F2 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
         Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Help: "),

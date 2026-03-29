@@ -99,10 +99,18 @@ impl<'a> Default for DfaModel<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum Focus {
+    #[default]
+    TopicList,
+    TopicContent,
+}
+
 #[derive(Debug)]
 pub(crate) struct Model<'a> {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
+    pub(crate) focus: Focus,
     pub(crate) proplogic_state: PropositionalLogicModel,
     pub(crate) settheory_state: SetTheoryModel<'a>,
     pub(crate) dfa_state: DfaModel<'a>,
@@ -114,6 +122,7 @@ impl<'a> Default for Model<'a> {
         Self {
             running: true,
             selected_topic: SelectedTopic::default(),
+            focus: Focus::default(),
             proplogic_state: Default::default(),
             settheory_state: Default::default(),
             dfa_state: Default::default(),
