@@ -9,6 +9,7 @@ It aims to help learning these topics by offering simple ways of exploration and
 Currently the following topics are implemented:
 - set theory
 - propositional logic
+- deterministic finite automata
 
 More will follow.  
 The core logic, without the TUI part, can be used through the crate `theoinf`.
@@ -19,7 +20,7 @@ All the usual operations of naive set theory are implemented.
 Press `F1` to toggle the help next to the editor.  
 Press `F5` to let your terms be evaluated.
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/0ad9565acd7e5ef3ec89de7b00098a97e39d7003/theotui/images/set_theory.png" alt="set theory">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/4bbf924245580c5fe66b892e08ffeeacb0d70695/theotui/images/set_theory.png" alt="set theory">
 
 ## propositional logic
 
@@ -28,5 +29,21 @@ Press `F1` to toggle the help next to the editor.
 Press `F5` or `Enter` to let your formula be evaluated.  
 The truth table can be filtered with `Ctrl-t`/`Ctrl-f` to only show the assignments resulting in true or false.
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/0ad9565acd7e5ef3ec89de7b00098a97e39d7003/theotui/images/propositional_logic.png" alt="propositional logic">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/4bbf924245580c5fe66b892e08ffeeacb0d70695/theotui/images/propositional_logic.png" alt="propositional logic">
+
+## deterministic finite automata (DFA)
+
+A `DFA` is defined with the usual 5 parts:
+
+- `Sigma`, the alphabet
+- `S`, the set of states
+- `start`, the starting state
+- `F`, the set of accepting states
+- `delta`, the set of state transitions
+
+A single transition is a tuple of 3: `(current_state, symbol, next_state)`  
+Press `F1` to toggle the help next to the editor.  
+Press `F5` or `Enter` in the `Word` input to let your word be checked for acceptance.  
+
+<img src="https://codeberg.org/dawe/theotui/raw/commit/4bbf924245580c5fe66b892e08ffeeacb0d70695/theotui/images/dfa.png" alt="dfa">
 
