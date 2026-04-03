@@ -92,17 +92,20 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             None
         }
         (SelectedTopic::Dfa, KeyCode::F(5)) => Some(Msg::DfaMsg(DfaMsg::Eval)),
-        (SelectedTopic::Dfa, _) => {
-            match model.dfa_state.focus {
-                crate::model::DfaFocus::Definition => {
-                    model.dfa_state.definition_textarea.input(key);
-                }
-                crate::model::DfaFocus::WordInput => {
+        (SelectedTopic::Dfa, _) => match model.dfa_state.focus {
+            crate::model::DfaFocus::Definition => {
+                model.dfa_state.definition_textarea.input(key);
+                None
+            }
+            crate::model::DfaFocus::WordInput => {
+                if key.code == KeyCode::Enter {
+                    Some(Msg::DfaMsg(DfaMsg::Eval))
+                } else {
                     model.dfa_state.input_word_textarea.input(key);
+                    None
                 }
             }
-            None
-        }
+        },
         _ => None,
     }
 }
