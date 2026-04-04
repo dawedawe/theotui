@@ -96,6 +96,11 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let term_rect = sub_vert_split[0];
     let result_rect = sub_vert_split[1];
 
+    model
+        .settheory_state
+        .term_textarea
+        .set_cursor_line_style(default_style);
+
     let editor_block = Block::default().borders(Borders::ALL).style(default_style);
     let editor_block = if model.focus == Focus::TopicContent {
         editor_block
@@ -104,16 +109,8 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
     } else {
         editor_block.title(" Term ")
     };
-    frame.render_widget(editor_block, term_rect);
-    let editor_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(term_rect);
-    model
-        .settheory_state
-        .term_textarea
-        .set_cursor_line_style(default_style);
-    frame.render_widget(&model.settheory_state.term_textarea, editor_rect[0]);
+    model.settheory_state.term_textarea.set_block(editor_block);
+    frame.render_widget(&model.settheory_state.term_textarea, term_rect);
 
     // render eval result
     match &model.settheory_state.result {
@@ -478,12 +475,11 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         } else {
             definition_block.title(" Definition ")
         };
-    frame.render_widget(definition_block, definition_rect);
-    let definition_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(definition_rect);
-    frame.render_widget(&model.dfa_state.definition_textarea, definition_rect[0]);
+    model
+        .dfa_state
+        .definition_textarea
+        .set_block(definition_block);
+    frame.render_widget(&model.dfa_state.definition_textarea, definition_rect);
 
     // render word input textarea
     let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
@@ -495,12 +491,11 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         } else {
             word_input_block.title(" Word ")
         };
-    frame.render_widget(word_input_block, word_input_rect);
-    let word_input_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(word_input_rect);
-    frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect[0]);
+    model
+        .dfa_state
+        .input_word_textarea
+        .set_block(word_input_block);
+    frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect);
 
     let transitions_block = Block::default().borders(Borders::ALL).style(default_style);
     let transitions_block =
@@ -511,12 +506,8 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         } else {
             transitions_block.title(" Transitions ")
         };
-    frame.render_widget(transitions_block, transitions_rect);
-    let transitions_rect = Layout::default()
-        .margin(1)
-        .constraints([Constraint::Percentage(100)].as_ref())
-        .split(transitions_rect);
-    frame.render_widget(&model.dfa_state.transitions, transitions_rect[0]);
+    model.dfa_state.transitions.set_block(transitions_block);
+    frame.render_widget(&model.dfa_state.transitions, transitions_rect);
 
     // render result
     let result_paragraph = Paragraph::new(model.dfa_state.result.as_str())
