@@ -6,7 +6,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table,
+        ScrollbarState, Table, Wrap,
     },
 };
 use strum::IntoEnumIterator;
@@ -447,6 +447,7 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
             [
                 Constraint::Min(7),    // definition
                 Constraint::Length(3), // input word
+                Constraint::Min(3),    // transitions
                 Constraint::Length(3), // result
             ]
             .as_ref(),
@@ -455,7 +456,8 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     let definition_rect = sub_vert_split[0];
     let word_input_rect = sub_vert_split[1];
-    let result_rect = sub_vert_split[2];
+    let transitions_rect = sub_vert_split[2];
+    let result_rect = sub_vert_split[3];
 
     model
         .dfa_state
@@ -499,6 +501,17 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .constraints([Constraint::Percentage(100)].as_ref())
         .split(word_input_rect);
     frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect[0]);
+
+    // render transitions
+    let transitions_paragraph = Paragraph::new(model.dfa_state.transitions.as_str())
+        .wrap(Wrap { trim: false })
+        .style(default_style)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Transitions "),
+        );
+    frame.render_widget(transitions_paragraph, transitions_rect);
 
     // render result
     let result_paragraph = Paragraph::new(model.dfa_state.result.as_str())

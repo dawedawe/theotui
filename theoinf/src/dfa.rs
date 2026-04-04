@@ -291,14 +291,9 @@ impl Dfa {
 
     /// The [Dfa] accepts the given word.
     pub fn accepts(&self, word: &str) -> bool {
-        let mut running_dfa = RunningDfa {
-            dfa: self,
-            current_state: &self.start_state,
-            remaining_input: word.chars().collect(),
-            accepted_input: vec![],
-        };
+        let mut running_dfa = RunningDfa::new(self, word);
         while running_dfa.transition() {}
-        running_dfa.accepts()
+        running_dfa.accepted()
     }
 }
 
@@ -306,6 +301,7 @@ impl Dfa {
 pub struct RunningDfa<'a> {
     pub(crate) dfa: &'a Dfa,
     pub(crate) current_state: &'a State,
+    pub(crate) transitions: Vec<(Symbol, &'a State)>,
     pub(crate) remaining_input: Vec<Symbol>,
     pub(crate) accepted_input: Vec<Symbol>,
 }
@@ -316,6 +312,7 @@ impl<'a> RunningDfa<'a> {
         Self {
             dfa,
             current_state: &dfa.start_state,
+            transitions: vec![],
             remaining_input: word.to_string().chars().collect(),
             accepted_input: vec![],
         }
@@ -326,9 +323,10 @@ impl<'a> RunningDfa<'a> {
         match self.remaining_input.first() {
             None => false,
             Some(symbol) => {
-                let next_state = self.dfa.delta.get(&(self.current_state.clone(), *symbol));
-                if let Some(next_state) = next_state {
+                if let Some(next_state) = self.dfa.delta.get(&(self.current_state.clone(), *symbol))
+                {
                     self.current_state = next_state;
+                    self.transitions.push((*symbol, next_state));
                     self.accepted_input.push(*symbol);
                     self.remaining_input.remove(0);
                     true
@@ -339,9 +337,20 @@ impl<'a> RunningDfa<'a> {
         }
     }
 
+    /// The [Dfa] accepts the word.
+    pub fn accepts(&mut self) -> bool {
+        while self.transition() {}
+        self.accepted()
+    }
+
     /// The [Dfa] is in a final state and the word has been fully consumed.
-    pub fn accepts(&self) -> bool {
+    pub fn accepted(&self) -> bool {
         self.dfa.final_states.contains(self.current_state) && self.remaining_input.is_empty()
+    }
+
+    /// The state transitions of the [Dfa] while processing the word.
+    pub fn transitions(&self) -> &Vec<(char, &'a String)> {
+        &self.transitions
     }
 }
 
@@ -549,5 +558,29 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
 ";
         let r = parser::parse_dfa_definition(&mut s);
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn runningdfa_transitions_works() {
+        let mut s = "
+Sigma = { 'a', 'b'  }
+S = { s0, s1, s2 }
+start = s0
+F = { s2  }
+delta = { (s0, 'a', s1), (s1, 'b', s2) , (s2, 'b', s2) }
+";
+        let r = parser::parse_dfa_definition(&mut s);
+        assert!(r.is_ok());
+        let dfa = r.unwrap();
+        let mut running_dfa = RunningDfa::new(&dfa, "abb");
+        assert!(running_dfa.accepts());
+        assert_eq!(
+            vec![
+                ('a', &"s1".to_string()),
+                ('b', &"s2".to_string()),
+                ('b', &"s2".to_string())
+            ],
+            running_dfa.transitions
+        );
     }
 }

@@ -7,7 +7,7 @@ use ratatui::{
 };
 use std::{collections::HashMap, ops::Deref};
 use theoinf::{
-    dfa,
+    dfa::{self, RunningDfa},
     propositional_logic::{Assignment, run},
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
@@ -92,20 +92,22 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             None
         }
         (SelectedTopic::Dfa, KeyCode::F(5)) => Some(Msg::DfaMsg(DfaMsg::Eval)),
-        (SelectedTopic::Dfa, _) => match model.dfa_state.focus {
-            crate::model::DfaFocus::Definition => {
-                model.dfa_state.definition_textarea.input(key);
-                None
-            }
-            crate::model::DfaFocus::WordInput => {
-                if key.code == KeyCode::Enter {
-                    Some(Msg::DfaMsg(DfaMsg::Eval))
-                } else {
-                    model.dfa_state.input_word_textarea.input(key);
+        (SelectedTopic::Dfa, _) if model.focus == Focus::TopicContent => {
+            match model.dfa_state.focus {
+                crate::model::DfaFocus::Definition => {
+                    model.dfa_state.definition_textarea.input(key);
                     None
                 }
+                crate::model::DfaFocus::WordInput => {
+                    if key.code == KeyCode::Enter {
+                        Some(Msg::DfaMsg(DfaMsg::Eval))
+                    } else {
+                        model.dfa_state.input_word_textarea.input(key);
+                        None
+                    }
+                }
             }
-        },
+        }
         _ => None,
     }
 }
@@ -249,13 +251,21 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::DfaMsg(DfaMsg::Eval) => {
             let def = model.dfa_state.definition_textarea.lines().join("\n");
             let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
-            model.dfa_state.result = match dfa {
+            (model.dfa_state.result, model.dfa_state.transitions) = match dfa {
                 Ok(dfa) => {
                     let word = model.dfa_state.input_word_textarea.lines();
                     let word = word.first().map(|w| w.deref()).unwrap_or("");
-                    dfa.accepts(word).to_string()
+                    let mut running_dfa = RunningDfa::new(&dfa, word);
+                    let accepts = running_dfa.accepts();
+                    let transitions = running_dfa
+                        .transitions()
+                        .iter()
+                        .map(|(sym, state)| format!("({}, {})", sym, state))
+                        .collect::<Vec<String>>()
+                        .join(" -> ");
+                    (accepts.to_string(), transitions)
                 }
-                Err(e) => e,
+                Err(e) => (e, "".to_string()),
             }
         }
     }

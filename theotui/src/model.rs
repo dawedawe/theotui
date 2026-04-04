@@ -83,6 +83,7 @@ pub(crate) struct DfaModel<'a> {
     pub(crate) definition_textarea: TextArea<'a>,
     pub(crate) input_word_textarea: TextArea<'a>,
     pub(crate) focus: DfaFocus,
+    pub(crate) transitions: String,
     pub(crate) result: String,
 }
 
@@ -94,6 +95,7 @@ impl<'a> Default for DfaModel<'a> {
             definition_textarea: default_def,
             input_word_textarea: Default::default(),
             focus: Default::default(),
+            transitions: Default::default(),
             result: Default::default(),
         }
     }
