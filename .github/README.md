@@ -45,5 +45,5 @@ A single transition is a tuple of 3: `(current_state, symbol, next_state)`
 Press `F1` to toggle the help next to the editor.  
 Press `F5` or `Enter` in the `Word` input to let your word be checked for acceptance.  
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/4bbf924245580c5fe66b892e08ffeeacb0d70695/theotui/images/dfa.png" alt="dfa">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/93740bfa3207594639035d4e87eaa0f896c118ba/theotui/images/dfa.png" alt="dfa">
 
