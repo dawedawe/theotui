@@ -6,7 +6,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-        ScrollbarState, Table, Wrap,
+        ScrollbarState, Table,
     },
 };
 use strum::IntoEnumIterator;
@@ -502,16 +502,21 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .split(word_input_rect);
     frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect[0]);
 
-    // render transitions
-    let transitions_paragraph = Paragraph::new(model.dfa_state.transitions.as_str())
-        .wrap(Wrap { trim: false })
-        .style(default_style)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Transitions "),
-        );
-    frame.render_widget(transitions_paragraph, transitions_rect);
+    let transitions_block = Block::default().borders(Borders::ALL).style(default_style);
+    let transitions_block =
+        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Transitions {
+            transitions_block
+                .title(" Transitions* ")
+                .title_style(default_style.bold())
+        } else {
+            transitions_block.title(" Transitions ")
+        };
+    frame.render_widget(transitions_block, transitions_rect);
+    let transitions_rect = Layout::default()
+        .margin(1)
+        .constraints([Constraint::Percentage(100)].as_ref())
+        .split(transitions_rect);
+    frame.render_widget(&model.dfa_state.transitions, transitions_rect[0]);
 
     // render result
     let result_paragraph = Paragraph::new(model.dfa_state.result.as_str())

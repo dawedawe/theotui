@@ -106,6 +106,12 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
                         None
                     }
                 }
+                crate::model::DfaFocus::Transitions => {
+                    if key.code == KeyCode::Up || key.code == KeyCode::Down {
+                        model.dfa_state.transitions.input(key);
+                    }
+                    None
+                }
             }
         }
         _ => None,
@@ -136,7 +142,8 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 }
                 Focus::TopicContent => match model.dfa_state.focus {
                     DfaFocus::Definition => model.dfa_state.focus = DfaFocus::WordInput,
-                    DfaFocus::WordInput => model.focus = Focus::TopicList,
+                    DfaFocus::WordInput => model.dfa_state.focus = DfaFocus::Transitions,
+                    DfaFocus::Transitions => model.focus = Focus::TopicList,
                 },
             },
         },
@@ -152,11 +159,12 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             SelectedTopic::Dfa => match model.focus {
                 Focus::TopicList => {
                     model.focus = Focus::TopicContent;
-                    model.dfa_state.focus = DfaFocus::WordInput
+                    model.dfa_state.focus = DfaFocus::Transitions
                 }
                 Focus::TopicContent => match model.dfa_state.focus {
                     DfaFocus::Definition => model.focus = Focus::TopicList,
                     DfaFocus::WordInput => model.dfa_state.focus = DfaFocus::Definition,
+                    DfaFocus::Transitions => model.dfa_state.focus = DfaFocus::WordInput,
                 },
             },
         },
@@ -251,7 +259,8 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         Msg::DfaMsg(DfaMsg::Eval) => {
             let def = model.dfa_state.definition_textarea.lines().join("\n");
             let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
-            (model.dfa_state.result, model.dfa_state.transitions) = match dfa {
+
+            let (result, transitions) = match dfa {
                 Ok(dfa) => {
                     let word = model.dfa_state.input_word_textarea.lines();
                     let word = word.first().map(|w| w.deref()).unwrap_or("");
@@ -262,11 +271,15 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                         .iter()
                         .map(|(sym, state)| format!("({}, {})", sym, state))
                         .collect::<Vec<String>>()
-                        .join(" -> ");
+                        .join(" ->\n");
                     (accepts.to_string(), transitions)
                 }
                 Err(e) => (e, "".to_string()),
-            }
+            };
+            model.dfa_state.result = result;
+            model.dfa_state.transitions.select_all();
+            model.dfa_state.transitions.cut();
+            model.dfa_state.transitions.insert_str(transitions);
         }
     }
 }

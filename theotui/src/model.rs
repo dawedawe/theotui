@@ -76,6 +76,7 @@ pub(crate) enum DfaFocus {
     #[default]
     Definition,
     WordInput,
+    Transitions,
 }
 
 #[derive(Debug)]
@@ -83,7 +84,7 @@ pub(crate) struct DfaModel<'a> {
     pub(crate) definition_textarea: TextArea<'a>,
     pub(crate) input_word_textarea: TextArea<'a>,
     pub(crate) focus: DfaFocus,
-    pub(crate) transitions: String,
+    pub(crate) transitions: TextArea<'a>,
     pub(crate) result: String,
 }
 
