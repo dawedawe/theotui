@@ -1,5 +1,10 @@
 matrix:
   RUST: [stable, beta, nightly]
+  platform:
+    - linux/amd64
+
+labels:
+  customlabel: yo
 
 steps:
   test:
