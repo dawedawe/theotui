@@ -23,7 +23,8 @@ Press `F5` to let your terms be evaluated.
 All the usual operations of propositional logic are implemented.  
 Press `F1` to toggle the help next to the editor.  
 Press `F5` or `Enter` to let your formula be evaluated.  
-The truth table can be filtered with `Ctrl-t`/`Ctrl-f` to only show the assignments resulting in true or false.
+The truth table can be filtered with `Ctrl-t`/`Ctrl-f` to only show the assignments resulting in true or false.  
+The CNF and DNF are constructed if possible.
 
 <img src="https://codeberg.org/dawe/theotui/raw/commit/4bbf924245580c5fe66b892e08ffeeacb0d70695/theotui/images/propositional_logic.png" alt="propositional logic">
 

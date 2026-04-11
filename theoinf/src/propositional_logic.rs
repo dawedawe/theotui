@@ -1,25 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 
+use crate::propositional_logic::parser::pratt_parser;
 use winnow::ModalResult;
-use winnow::Parser;
-use winnow::ascii::multispace0;
-use winnow::combinator::alt;
-use winnow::combinator::cut_err;
-use winnow::combinator::delimited;
-use winnow::combinator::dispatch;
-use winnow::combinator::eof;
-use winnow::combinator::expression;
-use winnow::combinator::fail;
-use winnow::combinator::peek;
-use winnow::combinator::trace;
-use winnow::combinator::{Infix, Prefix};
-use winnow::error::ContextError;
-use winnow::error::ErrMode;
-use winnow::stream::AsChar;
-use winnow::token::any;
-use winnow::token::one_of;
-use winnow::token::take;
-use winnow::token::take_while;
 
 /// Expressions of the propositional logic language.
 #[derive(PartialEq, Debug, Clone)]
@@ -34,6 +16,23 @@ pub enum Expr {
     Equi(Box<Expr>, Box<Expr>),
     Impl(Box<Expr>, Box<Expr>),
     Paren(Box<Expr>),
+}
+
+impl Display for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::True => write!(f, "true"),
+            Expr::False => write!(f, "false"),
+            Expr::Var(v) => write!(f, "{}", v),
+            Expr::Not(expr) => write!(f, "!{}", expr),
+            Expr::And(expr1, expr2) => write!(f, "{} & {}", expr1, expr2),
+            Expr::Or(expr1, expr2) => write!(f, "{} | {}", expr1, expr2),
+            Expr::Xor(expr1, expr2) => write!(f, "{} ^ {}", expr1, expr2),
+            Expr::Equi(expr1, expr2) => write!(f, "{} <=> {}", expr1, expr2),
+            Expr::Impl(expr1, expr2) => write!(f, "{} -> {}", expr1, expr2),
+            Expr::Paren(expr) => write!(f, "({})", expr),
+        }
+    }
 }
 
 impl Expr {
@@ -66,14 +65,53 @@ impl Expr {
         vars.dedup();
         vars
     }
+
+    fn reduce<F>(exprs: &[Expr], f: &F) -> Expr
+    where
+        F: Fn(Expr, Expr) -> Expr,
+    {
+        if exprs.is_empty() {
+            panic!("can't create disjunction out of empty expressions");
+        } else if exprs.len() == 1 {
+            exprs[0].clone()
+        } else {
+            let left = exprs.iter().next().unwrap().clone();
+            let right = Expr::reduce(&exprs[1..], f);
+            f(left, right)
+        }
+    }
 }
 
-/// Parse the input to an [Expr].
-pub fn pratt_parser(input: &mut &str) -> ModalResult<Expr> {
-    fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
-        move |input: &mut &str| {
-            use Infix::Left;
-            expression(
+pub mod parser {
+    use winnow::ModalResult;
+    use winnow::Parser;
+    use winnow::ascii::multispace0;
+    use winnow::combinator::alt;
+    use winnow::combinator::cut_err;
+    use winnow::combinator::delimited;
+    use winnow::combinator::dispatch;
+    use winnow::combinator::eof;
+    use winnow::combinator::expression;
+    use winnow::combinator::fail;
+    use winnow::combinator::peek;
+    use winnow::combinator::trace;
+    use winnow::combinator::{Infix, Prefix};
+    use winnow::error::ContextError;
+    use winnow::error::ErrMode;
+    use winnow::stream::AsChar;
+    use winnow::token::any;
+    use winnow::token::one_of;
+    use winnow::token::take;
+    use winnow::token::take_while;
+
+    use crate::propositional_logic::Expr;
+
+    /// Parse the input to an [Expr].
+    pub fn pratt_parser(input: &mut &str) -> ModalResult<Expr> {
+        fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
+            move |input: &mut &str| {
+                use Infix::Left;
+                expression(
                 delimited(
                     multispace0,
                     dispatch! {peek(any);
@@ -117,39 +155,40 @@ pub fn pratt_parser(input: &mut &str) -> ModalResult<Expr> {
                 )),
             )
             .parse_next(input)
-        }
-    }
-
-    match parser(0).parse_next(input) {
-        Ok(r) => {
-            if eof::<&str, ErrMode<ContextError>>.parse_next(input).is_ok() {
-                Ok(r)
-            } else {
-                Err(ErrMode::Cut(ContextError::default()))
             }
         }
-        Err(e) => Err(e),
+
+        match parser(0).parse_next(input) {
+            Ok(r) => {
+                if eof::<&str, ErrMode<ContextError>>.parse_next(input).is_ok() {
+                    Ok(r)
+                } else {
+                    Err(ErrMode::Cut(ContextError::default()))
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
-}
 
-fn identifier<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
-    trace(
-        "identifier",
-        (
-            one_of(|c: char| c.is_alpha() || c == '_'),
-            take_while(0.., |c: char| c.is_alphanum() || c == '_'),
-        ),
-    )
-    .take()
-    .parse_next(input)
-}
+    fn identifier<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+        trace(
+            "identifier",
+            (
+                one_of(|c: char| c.is_alpha() || c == '_'),
+                take_while(0.., |c: char| c.is_alphanum() || c == '_'),
+            ),
+        )
+        .take()
+        .parse_next(input)
+    }
 
-fn false_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
-    trace("false_lit", "false").take().parse_next(input)
-}
+    fn false_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+        trace("false_lit", "false").take().parse_next(input)
+    }
 
-fn true_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
-    trace("true_lit", "true").take().parse_next(input)
+    fn true_lit<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
+        trace("true_lit", "true").take().parse_next(input)
+    }
 }
 
 /// Evaluate the given [Expr] using the given [Assignment].
@@ -190,15 +229,19 @@ impl TruthTable {
     pub fn new() -> Self {
         TruthTable { rows: vec![] }
     }
+
     pub fn is_sat(&self) -> bool {
         self.rows.iter().any(|e| e.1)
     }
+
     pub fn is_tautology(&self) -> bool {
         self.rows.iter().all(|e| e.1)
     }
+
     pub fn is_contradiction(&self) -> bool {
         self.rows.iter().all(|e| !e.1)
     }
+
     pub fn vars(&self) -> Vec<String> {
         if self.rows.is_empty() {
             vec![]
@@ -206,6 +249,104 @@ impl TruthTable {
             let mut keys: Vec<String> = self.rows[0].0.keys().map(|s| s.to_string()).collect();
             keys.sort();
             keys
+        }
+    }
+
+    /// The max_terms (false rows in the truth table) of a formula in CNF
+    pub fn max_terms(&self) -> Vec<Expr> {
+        fn collect_as_maxterm(assignment: &[(&str, bool)]) -> Expr {
+            if assignment.is_empty() {
+                panic!("can't create minterm out of empty vars");
+            } else if assignment.len() == 1 {
+                let (k, v) = assignment.iter().next().unwrap();
+                let var = Expr::Var(k.to_string());
+                if *v { Expr::Not(Box::new(var)) } else { var }
+            } else {
+                let (k, v) = assignment.iter().next().unwrap();
+                let var = Expr::Var(k.to_string());
+                let left = if *v { Expr::Not(Box::new(var)) } else { var };
+                let right = collect_as_maxterm(&assignment[1..]);
+                Expr::Or(Box::new(left), Box::new(right))
+            }
+        }
+
+        self.rows
+            .iter()
+            .filter_map(|(assignment, result)| {
+                if !result && !assignment.is_empty() {
+                    let mut assi: Vec<(&str, bool)> =
+                        assignment.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+                    assi.sort_by_key(|(k, _)| k.to_string());
+                    let term = collect_as_maxterm(&assi);
+                    Some(term)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// The min_terms (true rows in the truth table) of a formula in DNF
+    pub fn min_terms(&self) -> Vec<Expr> {
+        fn collect_as_minterm(assignment: &[(&str, bool)]) -> Expr {
+            if assignment.is_empty() {
+                panic!("can't create minterm out of empty vars");
+            } else if assignment.len() == 1 {
+                let (k, v) = assignment.iter().next().unwrap();
+                let var = Expr::Var(k.to_string());
+                if *v { var } else { Expr::Not(Box::new(var)) }
+            } else {
+                let (k, v) = assignment.iter().next().unwrap();
+                let var = Expr::Var(k.to_string());
+                let left = if *v { var } else { Expr::Not(Box::new(var)) };
+                let right = collect_as_minterm(&assignment[1..]);
+                Expr::And(Box::new(left), Box::new(right))
+            }
+        }
+
+        self.rows
+            .iter()
+            .filter_map(|(assignment, result)| {
+                if *result && !assignment.is_empty() {
+                    let mut assi: Vec<(&str, bool)> =
+                        assignment.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+                    assi.sort_by_key(|(k, _)| k.to_string());
+                    let term = collect_as_minterm(&assi);
+                    Some(term)
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// The CNF (Conjunctive Normal Form), a conjunction of the maxterms.
+    pub fn cnf(&self) -> Option<Expr> {
+        let terms: Vec<_> = self
+            .max_terms()
+            .into_iter()
+            .map(|expr| Expr::Paren(Box::new(expr)))
+            .collect();
+        if terms.is_empty() {
+            None
+        } else {
+            let f = |left, right| Expr::And(Box::new(left), Box::new(right));
+            Some(Expr::reduce(&terms, &f))
+        }
+    }
+
+    /// The DNF (Disjunctive Normal Form), a disjunction of the minterms.
+    pub fn dnf(&self) -> Option<Expr> {
+        let terms: Vec<_> = self
+            .min_terms()
+            .into_iter()
+            .map(|expr| Expr::Paren(Box::new(expr)))
+            .collect();
+        if terms.is_empty() {
+            None
+        } else {
+            let f = |left, right| Expr::Or(Box::new(left), Box::new(right));
+            Some(Expr::reduce(&terms, &f))
         }
     }
 }
@@ -252,6 +393,38 @@ pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
             std::result::Result::Ok(table)
         }
         ModalResult::Err(_) => std::result::Result::Err("parse error".to_string()),
+    }
+}
+
+/// The max_terms (false rows in the truth table) of a formula in CNF
+pub fn max_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
+    match truth_table(formula) {
+        Ok(table) => Ok(table.max_terms()),
+        Err(e) => Err(e),
+    }
+}
+
+/// The min_terms (true rows in the truth table) of a formula in DNF
+pub fn min_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
+    match truth_table(formula) {
+        Ok(table) => Ok(table.min_terms()),
+        Err(e) => Err(e),
+    }
+}
+
+/// The CNF (Conjunctive Normal Form) of the formula, a conjunction of the maxterms.
+pub fn cnf(formula: &str) -> std::result::Result<Option<Expr>, String> {
+    match truth_table(formula) {
+        Ok(table) => Ok(table.cnf()),
+        Err(e) => Err(e),
+    }
+}
+
+/// The DNF (Disjunctive Normal Form) of the formula, a disjunction of the minterms.
+pub fn dnf(formula: &str) -> std::result::Result<Option<Expr>, String> {
+    match truth_table(formula) {
+        Ok(table) => Ok(table.dnf()),
+        Err(e) => Err(e),
     }
 }
 
@@ -516,5 +689,102 @@ mod tests {
         assert!(!table.is_tautology());
         assert!(!table.is_contradiction());
         assert_eq!(table.vars(), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn max_terms_works() {
+        let terms = max_terms("a & !a").unwrap();
+        assert_eq!(terms.len(), 2);
+        let terms = max_terms("a | !a").unwrap();
+        assert!(terms.is_empty());
+
+        let terms =
+            max_terms("(a | b | c) & (a | !b | !c) & (!a | b | !c) & (!a | !b | c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "a | b | c");
+        assert_eq!(terms[1].to_string(), "a | !b | !c");
+        assert_eq!(terms[2].to_string(), "!a | b | !c");
+        assert_eq!(terms[3].to_string(), "!a | !b | c");
+
+        let terms =
+            max_terms("(!a & !b & c) | (!a & b & !c) | (a & !b & !c) | (a & b & c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "a | b | c");
+        assert_eq!(terms[1].to_string(), "a | !b | !c");
+        assert_eq!(terms[2].to_string(), "!a | b | !c");
+        assert_eq!(terms[3].to_string(), "!a | !b | c");
+
+        let terms = max_terms("(!a & b) | (a & c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "a | b | c");
+        assert_eq!(terms[1].to_string(), "a | b | !c");
+        assert_eq!(terms[2].to_string(), "!a | b | c");
+        assert_eq!(terms[3].to_string(), "!a | !b | c");
+    }
+
+    #[test]
+    fn min_terms_works() {
+        let terms = min_terms("a & !a").unwrap();
+        assert!(terms.is_empty());
+        let terms = min_terms("a | !a").unwrap();
+        assert_eq!(terms.len(), 2);
+
+        let terms =
+            min_terms("(!a & !b & c) | (!a & b & !c) | (a & !b & !c) | (a & b & c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "!a & !b & c");
+        assert_eq!(terms[0].to_string(), "!a & !b & c");
+        assert_eq!(terms[1].to_string(), "!a & b & !c");
+        assert_eq!(terms[2].to_string(), "a & !b & !c");
+        assert_eq!(terms[3].to_string(), "a & b & c");
+
+        let terms =
+            min_terms("(a | b | c) & (a | !b | !c) & (!a | b | !c) & (!a | !b | c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "!a & !b & c");
+        assert_eq!(terms[1].to_string(), "!a & b & !c");
+        assert_eq!(terms[2].to_string(), "a & !b & !c");
+        assert_eq!(terms[3].to_string(), "a & b & c");
+
+        let terms = min_terms("(!a & b) | (a & c)").unwrap();
+        assert_eq!(terms.len(), 4);
+        assert_eq!(terms[0].to_string(), "!a & b & !c");
+        assert_eq!(terms[1].to_string(), "!a & b & c");
+        assert_eq!(terms[2].to_string(), "a & !b & c");
+        assert_eq!(terms[3].to_string(), "a & b & c");
+    }
+
+    #[test]
+    fn cnf_works() {
+        let f = cnf("(!a & b) | (a & c)").unwrap().unwrap();
+        assert_eq!(
+            f.to_string(),
+            "(a | b | c) & (a | b | !c) & (!a | b | c) & (!a | !b | c)"
+        );
+    }
+
+    #[test]
+    fn cnf_works_for_tautology() {
+        let formula = "a | true";
+        let terms = max_terms(formula).unwrap();
+        assert_eq!(terms.len(), 0);
+        assert!(cnf(formula).unwrap().is_none());
+    }
+
+    #[test]
+    fn dnf_works() {
+        let f = dnf("(!a & b) | (a & c)").unwrap().unwrap();
+        assert_eq!(
+            f.to_string(),
+            "(!a & b & !c) | (!a & b & c) | (a & !b & c) | (a & b & c)"
+        );
+    }
+
+    #[test]
+    fn dnf_works_for_contradiction() {
+        let formula = "a & false";
+        let terms = min_terms(formula).unwrap();
+        assert_eq!(terms.len(), 0);
+        assert!(dnf(formula).unwrap().is_none());
     }
 }

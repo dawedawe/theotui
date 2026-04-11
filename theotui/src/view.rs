@@ -195,7 +195,9 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             [
                 Constraint::Length(3), // formula input
                 Constraint::Length(3), // classification
-                Constraint::Min(10),   // result / truth table
+                Constraint::Min(7),    // result / truth table
+                Constraint::Length(3), // CNF
+                Constraint::Length(3), // DNF
             ]
             .as_ref(),
         )
@@ -204,6 +206,8 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let formula_rect = sub_vert_split[0];
     let classification_rect = sub_vert_split[1];
     let result_rect = sub_vert_split[2];
+    let cnf_rect = sub_vert_split[3];
+    let dnf_rect = sub_vert_split[4];
 
     // render formula input
     let formula_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
@@ -371,6 +375,26 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 result_rect,
                 &mut model.proplogic_state.truth_table_scroll_state,
             );
+
+            // render cnf
+            let cnf = match result_table.cnf() {
+                Some(e) => e.to_string(),
+                None => "".to_string(),
+            };
+            let cnf_paragraph = Paragraph::new(cnf)
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" CNF "));
+            frame.render_widget(cnf_paragraph, cnf_rect);
+
+            // render dnf
+            let dnf = match result_table.dnf() {
+                Some(e) => e.to_string(),
+                None => "".to_string(),
+            };
+            let dnf_paragraph = Paragraph::new(dnf)
+                .style(default_style)
+                .block(Block::default().borders(Borders::ALL).title(" DNF "));
+            frame.render_widget(dnf_paragraph, dnf_rect);
         }
     };
 
