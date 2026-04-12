@@ -1,3 +1,17 @@
+## [0.3.0] - 2026-04-11
+
+### 🚀 Features
+
+- *(propositional logic)* Add support for CNF and DNF construction (#48)
+
+### 📚 Documentation
+
+- Add installation instruction
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump crate versions
+
 ## [0.2.0] - 2026-04-05
 
 ### 🚀 Features
