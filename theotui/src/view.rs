@@ -1,8 +1,8 @@
-use crate::model::{DfaFocus, Focus, Model, PropLogicResultFilter, SelectedTopic};
+use crate::model::{DfaFocus, DfaResult, Focus, Model, PropLogicResultFilter, SelectedTopic};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Styled},
     text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
@@ -488,6 +488,10 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .dfa_state
         .input_word_textarea
         .set_cursor_line_style(default_style);
+    model
+        .dfa_state
+        .transitions
+        .set_line_number_style(default_style);
 
     // render definition textarea
     let definition_block = Block::default().borders(Borders::ALL).style(default_style);
@@ -522,21 +526,42 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
     frame.render_widget(&model.dfa_state.input_word_textarea, word_input_rect);
 
     let transitions_block = Block::default().borders(Borders::ALL).style(default_style);
-    let transitions_block =
-        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Transitions {
+    let transitions_block = {
+        let count = model.dfa_state.transitions.lines().len();
+        let show_count = matches!(model.dfa_state.result, DfaResult::Accepted(_));
+        let has_focus =
+            model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Transitions;
+        let mut title = " Transitions".to_string();
+        if show_count {
+            title.push_str(format!(" ({count})").as_str());
+        }
+        if has_focus {
+            title.push_str("* ");
             transitions_block
-                .title(" Transitions* ")
-                .title_style(default_style.bold())
+                .title(title)
+                .set_style(default_style.bold())
         } else {
-            transitions_block.title(" Transitions ")
-        };
+            title.push(' ');
+            transitions_block.title(title)
+        }
+    };
     model.dfa_state.transitions.set_block(transitions_block);
     frame.render_widget(&model.dfa_state.transitions, transitions_rect);
 
     // render result
-    let result_paragraph = Paragraph::new(model.dfa_state.result.as_str())
-        .style(default_style)
-        .block(Block::default().borders(Borders::ALL).title(" Result "));
+    let result_paragraph = {
+        let result = match &model.dfa_state.result {
+            DfaResult::None => "".to_string(),
+            DfaResult::Error(e) => e.clone(),
+            DfaResult::Accepted(b) => b.to_string(),
+        };
+
+        Paragraph::new(result).style(default_style).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Acceptor Result "),
+        )
+    };
     frame.render_widget(result_paragraph, result_rect);
 
     // render help if toggled

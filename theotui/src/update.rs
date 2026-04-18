@@ -1,10 +1,12 @@
 use crate::model::{
-    DfaFocus, Focus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic, SetTheoryResult,
+    DfaFocus, DfaResult, Focus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic,
+    SetTheoryResult,
 };
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
+use ratatui_textarea::CursorMove;
 use std::{collections::HashMap, ops::Deref};
 use theoinf::{
     dfa::{self, RunningDfa},
@@ -272,14 +274,16 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                         .map(|(sym, state)| format!("({}, {})", sym, state))
                         .collect::<Vec<String>>()
                         .join(" ->\n");
-                    (accepts.to_string(), transitions)
+                    (DfaResult::Accepted(accepts), transitions)
                 }
-                Err(e) => (e, "".to_string()),
+                Err(e) => (DfaResult::Error(e), "".to_string()),
             };
             model.dfa_state.result = result;
             model.dfa_state.transitions.select_all();
             model.dfa_state.transitions.cut();
             model.dfa_state.transitions.insert_str(transitions);
+            model.dfa_state.transitions.move_cursor(CursorMove::Top);
+            model.dfa_state.transitions.move_cursor(CursorMove::End);
         }
     }
 }

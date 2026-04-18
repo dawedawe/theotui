@@ -79,13 +79,21 @@ pub(crate) enum DfaFocus {
     Transitions,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum DfaResult {
+    #[default]
+    None,
+    Error(String),
+    Accepted(bool),
+}
+
 #[derive(Debug)]
 pub(crate) struct DfaModel<'a> {
     pub(crate) definition_textarea: TextArea<'a>,
     pub(crate) input_word_textarea: TextArea<'a>,
     pub(crate) focus: DfaFocus,
     pub(crate) transitions: TextArea<'a>,
-    pub(crate) result: String,
+    pub(crate) result: DfaResult,
 }
 
 impl<'a> Default for DfaModel<'a> {
