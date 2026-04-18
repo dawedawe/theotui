@@ -51,7 +51,13 @@ F = { s2 }
 delta = { (s0, 'a', s1), (s1, 'b', s2) }
 ```
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/93740bfa3207594639035d4e87eaa0f896c118ba/theotui/images/dfa.png" alt="dfa">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/218b531040890c543b7e8782858a988c1e23e85a/theotui/images/dfa.png" alt="dfa">
+
+## Usage
+
+```shell
+theotui [--dfa file]
+```
 
 ## Installation
 

@@ -45,8 +45,23 @@ A `DFA` is defined with the usual 5 parts:
 A single transition is a tuple of 3: `(current_state, symbol, next_state)`  
 Press `F1` to toggle the help next to the editor.  
 Press `F5` or `Enter` in the `Word` input to let your word be checked for acceptance.  
+With the argument `--dfa file.txt` a stored definition can be read from the given file at the start of theotui.  
+Here's a complete definition example:
+```
+Sigma = { 'a', 'b' }
+S = { s0, s1, s2 }
+start = s0
+F = { s2 }
+delta = { (s0, 'a', s1), (s1, 'b', s2) }
+```
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/93740bfa3207594639035d4e87eaa0f896c118ba/theotui/images/dfa.png" alt="dfa">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/218b531040890c543b7e8782858a988c1e23e85a/theotui/images/dfa.png" alt="dfa">
+
+## Usage
+
+```shell
+theotui [--dfa file]
+```
 
 ## Installation
 
