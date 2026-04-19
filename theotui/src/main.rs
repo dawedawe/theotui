@@ -9,11 +9,11 @@ use update::{handle_event, update};
 use view::view;
 
 fn main() -> color_eyre::Result<()> {
+    color_eyre::install()?;
     let mut model = Model::default();
     let args: Vec<_> = env::args().collect();
     read_inputs_from_args(args, &mut model);
 
-    color_eyre::install()?;
     let mut terminal = ratatui::init();
 
     while model.running {
@@ -28,12 +28,16 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn usage() -> ! {
-    eprintln!("Usage: theotui [--dfa file]");
-    std::process::exit(1)
+    eprintln!("Usage: theotui [OPTIONS]");
+    eprintln!("Options:");
+    eprintln!("  --dfa file        Read DFA definition from file");
+    eprintln!("  --help            Print help");
+    std::process::exit(0)
 }
 
 fn read_inputs_from_args(args: Vec<String>, model: &mut Model) {
-    if args.len() == 1 {
+    if args.len() == 2 && args[1] == "--help" {
+        usage();
     } else if args.len() == 3 && args[1] == "--dfa" {
         match fs::read_to_string(&args[2]) {
             Result::Ok(s) => {
@@ -43,10 +47,11 @@ fn read_inputs_from_args(args: Vec<String>, model: &mut Model) {
             }
             Err(e) => {
                 eprintln!("{e}");
-                usage();
+                std::process::exit(1);
             }
         }
-    } else {
-        usage();
+    } else if args.len() != 1 {
+        eprintln!("invalid option, try --help");
+        std::process::exit(1);
     }
 }

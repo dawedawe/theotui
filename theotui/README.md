@@ -56,7 +56,10 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
 ## Usage
 
 ```shell
-theotui [--dfa file]
+Usage: theotui [OPTIONS]
+Options:
+  --dfa file        Read DFA definition from file
+  --help            Print help
 ```
 
 ## Installation
