@@ -53,12 +53,41 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) }
 
 <img src="https://codeberg.org/dawe/theotui/raw/commit/218b531040890c543b7e8782858a988c1e23e85a/theotui/images/dfa.png" alt="dfa">
 
+## type-3 grammars
+
+A `Type-3 Grammar` is defined with the usual 4 parts:
+
+- `V`, the set of non-terminals
+- `Sigma`, the set of terminals
+- `P`, the set of production rules
+- `S`, the start non-terminal                
+
+A single (right-regular) production rule has one of the following three forms:  
+
+- `T -> 'aT'`  
+- `T -> 'a'`  
+- `T -> ''` here the empty word epsilon is denoted as `''`
+
+Press `F1` to toggle the help next to the editor.  
+Press `F5` or `Enter` in the `Word` input to let your word be checked for a possible production.  
+With the argument `--t3g file.txt` a stored definition can be read from the given file at the start of theotui.  
+Here's a complete definition example:
+```
+V = { S, T }
+Sigma = { 'a', 'b' }
+P = { S -> 'aT', T -> 'b', T -> 'bT', T -> '' }
+S = S
+```
+
+<img src="https://codeberg.org/dawe/theotui/raw/commit/eabd98ad2ca3b542914f19bf863c7ab0a58113b8/theotui/images/type3grammar.png" alt="type-3 grammar">
+
 ## Usage
 
 ```shell
 Usage: theotui [OPTIONS]
 Options:
   --dfa file        Read DFA definition from file
+  --t3g file        Read Type-3 Grammar definition from file
   --help            Print help
 ```
 
@@ -67,4 +96,3 @@ Options:
 ```shell
 cargo install theotui
 ```
-

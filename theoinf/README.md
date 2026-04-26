@@ -5,6 +5,7 @@ Currently, there are parsers and interpreters for the following topics:
 - set theory
 - propositional logic
 - deterministic finite automata
+- type-3 grammars
 
 More will follow.  
 
@@ -20,4 +21,9 @@ The result struct contains the truth table and more information about the formul
 ## deterministic finite automata
 
 A DFA can be defined and words can be tested for acceptance.
+
+## type-3 grammars
+
+A Type-3 grammar with right-regular production rules can be defined.  
+Words can be tested if the grammar can produce them.
 

@@ -1,4 +1,7 @@
-use crate::model::{DfaFocus, DfaResult, Focus, Model, PropLogicResultFilter, SelectedTopic};
+use crate::model::{
+    DfaFocus, DfaResult, Focus, Model, PropLogicResultFilter, SelectedTopic, T3GrammarFocus,
+    T3GrammarResult,
+};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -54,6 +57,7 @@ pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
         SelectedTopic::SetTheory => render_settheory(frame, topics_content_rect, model),
         SelectedTopic::PropositionalLogic => render_proplogic(frame, topics_content_rect, model),
         SelectedTopic::Dfa => render_dfa(frame, topics_content_rect, model),
+        SelectedTopic::T3Grammar => render_t3grammar(frame, topics_content_rect, model),
     }
 }
 
@@ -582,6 +586,168 @@ delta = { (s0, 'a', s1), (s1, 'b', s2) } // the set of state transitions of the 
         Span::raw("Switch focus: "),
         Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Evaluate: "),
+        Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Help: "),
+        Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Exit: "),
+        Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
+    ];
+    let key_bindings_text = Text::from(Line::from(key_bindings)).style(default_style);
+    let key_bindings_paragraph = Paragraph::new(key_bindings_text);
+    frame.render_widget(key_bindings_paragraph, key_bindings_rect);
+}
+
+fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
+    let default_style = default_style();
+
+    let main_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(1),    // definition, input word
+                Constraint::Length(1), // key bindings
+            ]
+            .as_ref(),
+        )
+        .split(rect);
+
+    let key_bindings_rect = main_vert_split[1];
+    let (non_help_rect, help_rect) = if model.show_help {
+        let halfs = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+            .split(main_vert_split[0]);
+        (halfs[0], halfs[1])
+    } else {
+        (main_vert_split[0], Rect::default())
+    };
+
+    let sub_vert_split = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Min(7),    // definition
+                Constraint::Length(3), // input word
+                Constraint::Min(3),    // transitions
+                Constraint::Length(3), // result
+            ]
+            .as_ref(),
+        )
+        .split(non_help_rect);
+
+    let definition_rect = sub_vert_split[0];
+    let word_input_rect = sub_vert_split[1];
+    let productions_rect = sub_vert_split[2];
+    let result_rect = sub_vert_split[3];
+
+    model
+        .t3grammar_state
+        .definition_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .t3grammar_state
+        .input_word_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .t3grammar_state
+        .productions
+        .set_line_number_style(default_style);
+
+    // render definition textarea
+    let definition_block = Block::default().borders(Borders::ALL).style(default_style);
+    let definition_block = if model.focus == Focus::TopicContent
+        && model.t3grammar_state.focus == T3GrammarFocus::Definition
+    {
+        definition_block
+            .title(" Definition G* ")
+            .title_style(default_style.bold())
+    } else {
+        definition_block.title(" Definition G ")
+    };
+    model
+        .t3grammar_state
+        .definition_textarea
+        .set_block(definition_block);
+    frame.render_widget(&model.t3grammar_state.definition_textarea, definition_rect);
+
+    // render word input textarea
+    let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
+    let word_input_block = if model.focus == Focus::TopicContent
+        && model.t3grammar_state.focus == T3GrammarFocus::WordInput
+    {
+        word_input_block
+            .title(" Word w* ")
+            .title_style(default_style.bold())
+    } else {
+        word_input_block.title(" Word w ")
+    };
+    model
+        .t3grammar_state
+        .input_word_textarea
+        .set_block(word_input_block);
+    frame.render_widget(&model.t3grammar_state.input_word_textarea, word_input_rect);
+
+    let productions_block = Block::default().borders(Borders::ALL).style(default_style);
+    let productions_block = {
+        let count = if let T3GrammarResult::Produced(c) = model.t3grammar_state.result {
+            c
+        } else {
+            0
+        };
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t3grammar_state.focus == T3GrammarFocus::Productions;
+        let mut title = " Productions".to_string();
+        if count > 0 {
+            title.push_str(format!(" ({count})").as_str());
+        }
+        if has_focus {
+            title.push_str("* ");
+            productions_block
+                .title(title)
+                .set_style(default_style.bold())
+        } else {
+            title.push(' ');
+            productions_block.title(title)
+        }
+    };
+    model
+        .t3grammar_state
+        .productions
+        .set_block(productions_block);
+    frame.render_widget(&model.t3grammar_state.productions, productions_rect);
+
+    // render result
+    let result_paragraph = {
+        let result = match &model.t3grammar_state.result {
+            T3GrammarResult::None => "".to_string(),
+            T3GrammarResult::Error(e) => e.clone(),
+            T3GrammarResult::Produced(b) if *b == 0 => "w ∉ L(G)".to_string(),
+            T3GrammarResult::Produced(_) => "w ∈ L(G)".to_string(),
+        };
+
+        Paragraph::new(result)
+            .style(default_style)
+            .block(Block::default().borders(Borders::ALL).title(" Result "))
+    };
+    frame.render_widget(result_paragraph, result_rect);
+
+    // render help if toggled
+    if model.show_help {
+        let help = "V = { S, T }                                    // the set of non-terminals
+Sigma = { 'a', 'b' }                            // the set of the terminal symbols
+P = { S -> 'aT', T -> 'b', T -> 'bT', T -> '' } // the set of production rules
+S = S                                           // the start non-terminal";
+        let help_paragraph = Paragraph::new(help)
+            .style(default_style)
+            .block(Block::default().borders(Borders::ALL).title(" Help "));
+        frame.render_widget(help_paragraph, help_rect);
+    }
+
+    // render key bindings
+    let key_bindings = vec![
+        Span::raw("Switch focus: "),
+        Span::styled("Tab | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Try productions: "),
         Span::styled("F5 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Help: "),
         Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
