@@ -25,5 +25,5 @@ A DFA can be defined and words can be tested for acceptance.
 ## type-3 grammars
 
 A Type-3 grammar with right-regular production rules can be defined.  
-Words can be tested if the grammar can produce them.
+Words can be tested to find all possible production chains for them.
 

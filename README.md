@@ -6,6 +6,7 @@ Currently the following topics are implemented:
 - set theory
 - propositional logic
 - deterministic finite automata
+- type-3 grammars
 
 More will follow.  
 The core logic, without the TUI part, can be used through the crate `theoinf`.
