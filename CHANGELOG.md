@@ -1,3 +1,17 @@
+## [0.4.0] - 2026-04-28
+
+### 🚀 Features
+
+- *(DFA)* Support reading a DFA definition from file
+- Support the --help option to print the usage information
+- Support type-3 grammar
+
+### 📚 Documentation
+
+- Add usage to README.md
+
+### ⚙️ Miscellaneous Tasks
+
 ## [0.3.0] - 2026-04-11
 
 ### 🚀 Features
