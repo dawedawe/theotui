@@ -67,9 +67,15 @@ A `Type-3 Grammar` is defined with the usual 4 parts:
 - `P`, the set of production rules
 - `S`, the start non-terminal                
 
-A single (right-regular) production rule has one of the following three forms:  
+A single right-regular production rule has one of the following three forms:  
 
 - `T -> 'aT'`  
+- `T -> 'a'`  
+- `T -> ''` here the empty word epsilon is denoted as `''`
+
+A single left-regular production rule has one of the following three forms:  
+
+- `T -> 'Ta'`  
 - `T -> 'a'`  
 - `T -> ''` here the empty word epsilon is denoted as `''`
 

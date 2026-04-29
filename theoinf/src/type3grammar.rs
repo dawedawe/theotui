@@ -57,28 +57,29 @@ pub mod parser {
         take_while(1.., |c: char| c.is_alpha() && c.is_lowercase())
     }
 
-    /// Parses the right side of a production like aT or a
+    /// Parses the right side of a right or left-regular production like aT or Ta or a or epsilon
     pub fn production_rhs<'s>() -> impl Parser<&'s str, &'s str, ErrMode<ContextError>> {
-        let term_non_term = (terminal_symbol(), nonterminal_name()).take();
-        alt((term_non_term, terminal_symbol(), ""))
+        let right_reg = (terminal_symbol(), nonterminal_name()).take();
+        let left_reg = (nonterminal_name(), terminal_symbol()).take();
+        alt((right_reg, left_reg, terminal_symbol(), ""))
     }
 
-    /// Parses a production tuple like `(S, 'aT')`
-    pub fn production_tuple<'s>() -> impl Parser<&'s str, (&'s str, &'s str), ErrMode<ContextError>>
+    /// Parses a right or left-regular production rule like `S -> 'aT'` or `S -> 'Ta'`
+    pub fn production_rule<'s>() -> impl Parser<&'s str, (&'s str, &'s str), ErrMode<ContextError>>
     {
         let element = delimited("'", production_rhs(), cut_err("'"));
         let tuple = (nonterminal_name(), whitespace_wrapped("->"), element);
         trace(
-            "delta_tuple",
+            "production_rule",
             tuple.map(|(nt, _arrow, rhs)| (nt, rhs.trim_matches('\''))),
         )
     }
 
-    /// Parses a production set like `{ (S, 'aT'), (T, 'b') }`
+    /// Parses a production set like `{ S -> 'aT', T -> 'b' }`
     pub fn production_set<'s>()
     -> impl Parser<&'s str, Vec<(&'s str, &'s str)>, ErrMode<ContextError>> {
         let separator = whitespace_wrapped(",");
-        let comma_sep_list = separated(0.., production_tuple(), separator);
+        let comma_sep_list = separated(0.., production_rule(), separator);
         trace(
             "production_set",
             delimited(
@@ -167,6 +168,12 @@ pub type NonTerminal = String;
 pub type Rhs = String;
 pub type ProductionRule = (NonTerminal, Rhs);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Kind {
+    Left,
+    Right,
+}
+
 /// Defines a Type-3 Grammar
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Type3Grammar {
@@ -174,6 +181,7 @@ pub struct Type3Grammar {
     pub(crate) sigma: HashSet<Terminal>,
     pub(crate) productions: HashSet<ProductionRule>,
     pub(crate) start: NonTerminal,
+    pub(crate) kind: Kind,
 }
 
 impl Type3Grammar {
@@ -188,6 +196,8 @@ impl Type3Grammar {
             return Err("start must be an element of V.".into());
         }
 
+        let mut right_reg_detected = false;
+        let mut left_reg_detected = false;
         let (mut unknown_prod_nonterms, mut unknown_prod_terms): (Vec<String>, Vec<String>) =
             productions.iter().fold(
                 (vec![], vec![]),
@@ -200,18 +210,27 @@ impl Type3Grammar {
                     }
                     if rhs.len() == 2 {
                         let mut chars = rhs.chars();
-                        let first = chars.next().unwrap().to_string();
-                        let second = chars.next().unwrap().to_string();
-                        if !sigma.contains(&first) {
-                            unknown_terms.push(first.to_string());
+                        let first = chars.next().unwrap();
+                        let second = chars.next().unwrap();
+
+                        let (t, nt) = if first.is_lowercase() {
+                            right_reg_detected = true;
+                            (first.to_string(), second.to_string())
+                        } else {
+                            left_reg_detected = true;
+                            (second.to_string(), first.to_string())
+                        };
+                        if !sigma.contains(&t) {
+                            unknown_terms.push(t);
                         }
-                        if !nonterminals.contains(&second) {
-                            unknown_nonterms.push(second.to_string());
+                        if !nonterminals.contains(&nt) {
+                            unknown_nonterms.push(nt);
                         }
                     }
                     (unknown_nonterms, unknown_terms)
                 },
             );
+
         if !unknown_prod_nonterms.is_empty() {
             unknown_prod_nonterms.sort();
             unknown_prod_nonterms.dedup();
@@ -228,11 +247,21 @@ impl Type3Grammar {
             return Err(msg);
         }
 
+        let kind = match (right_reg_detected, left_reg_detected) {
+            (true, true) => {
+                return Err("Both right and left-regular production rules detected.".into());
+            }
+            (false, false) => Kind::Right,
+            (true, false) => Kind::Right,
+            (false, true) => Kind::Left,
+        };
+
         Ok(Type3Grammar {
             nonterminals,
             sigma,
             productions,
             start,
+            kind,
         })
     }
 
@@ -270,7 +299,14 @@ impl Type3Grammar {
                 lhs == nonterm && {
                     let rhs_chars: Vec<_> = rhs.chars().collect();
                     let rhs_len = rhs_chars.len();
-                    rhs_len > 0 && word.starts_with(rhs_chars[0]) || rhs_len == 0 && word.is_empty()
+                    if self.kind == Kind::Right {
+                        rhs_len > 0 && word.starts_with(rhs_chars[0])
+                            || rhs_len == 0 && word.is_empty()
+                    } else {
+                        rhs_len == 2 && word.ends_with(rhs_chars[1])
+                            || rhs_len == 1 && word.ends_with(rhs_chars[0])
+                            || rhs_len == 0 && word.is_empty()
+                    }
                 }
             })
             .map(|(lhs, rhs)| {
@@ -278,10 +314,12 @@ impl Type3Grammar {
                 let rhs_len = rhs_chars.len();
                 let mut rules_acc = rules_acc.clone();
                 rules_acc.push((lhs.clone(), rhs.clone()));
-                match rhs_len {
-                    0 => (word, None, rules_acc),
-                    1 => (&word[1..], None, rules_acc),
-                    2 => (&word[1..], Some(rhs_chars[1]), rules_acc),
+                match (&self.kind, rhs_len) {
+                    (_, 0) => (word, None, rules_acc),
+                    (Kind::Left, 1) => (&word[0..word.len() - 1], None, rules_acc),
+                    (Kind::Right, 1) => (&word[1..], None, rules_acc),
+                    (Kind::Left, 2) => (&word[0..word.len() - 1], Some(rhs_chars[0]), rules_acc),
+                    (Kind::Right, 2) => (&word[1..], Some(rhs_chars[1]), rules_acc),
                     _ => panic!("The parser should have caught this invalid rule."),
                 }
             })
@@ -405,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_production_rhs_works() {
+    fn production_rhs_works_for_right_regular() {
         let r = parser::production_rhs().parse_next(&mut "").unwrap();
         assert_eq!(r, "");
         let r = parser::production_rhs().parse_next(&mut "a").unwrap();
@@ -415,18 +453,35 @@ mod tests {
     }
 
     #[test]
-    fn parse_production_definition_works() {
-        let mut s = "P = { S-> 'aT', T ->'b', B -> '' }";
-        let r = parser::parse_productions_definition(&mut s).unwrap();
-        assert_eq!(r, vec![("S", "aT"), ("T", "b"), ("B", "")]);
-        assert_eq!(r.len(), 3);
+    fn production_rhs_works_for_left_regular() {
+        let r = parser::production_rhs().parse_next(&mut "").unwrap();
+        assert_eq!(r, "");
+        let r = parser::production_rhs().parse_next(&mut "a").unwrap();
+        assert_eq!(r, "a");
+        let r = parser::production_rhs().parse_next(&mut "Ta").unwrap();
+        assert_eq!(r, "Ta");
     }
 
     #[test]
-    fn parse_production_should_fail_for_left_regular_production() {
-        let mut s = "P = { S -> 'Ta', T -> 'b' }";
-        let r = parser::parse_productions_definition(&mut s);
-        assert!(r.is_err());
+    fn parse_production_definition_works_for_right_regular() {
+        let mut s = "P = { S-> 'aT', T ->'b', B -> '' }";
+        let r = parser::parse_productions_definition(&mut s).unwrap();
+        assert_eq!(r, vec![("S", "aT"), ("T", "b"), ("B", "")]);
+    }
+
+    #[test]
+    fn production_rule_works_for_left_regular() {
+        let mut s = "S -> 'Ta'";
+        let r = parser::production_rule().parse_next(&mut s);
+        assert!(r.is_ok());
+        assert_eq!(r.unwrap(), ("S", "Ta"));
+    }
+
+    #[test]
+    fn parse_production_definition_works_for_left_regular() {
+        let mut s = "P = { S -> 'Ta', T -> 'b', B -> '' }";
+        let r = parser::parse_productions_definition(&mut s).unwrap();
+        assert_eq!(r, vec![("S", "Ta"), ("T", "b"), ("B", "")]);
     }
 
     #[test]
@@ -453,6 +508,30 @@ mod tests {
     }
 
     #[test]
+    fn parse_left_regular_t3grammar_works() {
+        let mut s = "
+    V = { S, T }
+    Sigma = { 'a', 'b'  }
+    P = { S -> 'Ta' }
+    S = S
+    ";
+        let r = parser::parse_t3grammar_definition(&mut s);
+        assert!(r.is_ok());
+    }
+
+    #[test]
+    fn parse_t3grammar_with_left_right_mixed_should_fail() {
+        let mut s = "
+    V = { S, T }
+    Sigma = { 'a', 'b'  }
+    P = { S -> 'aT', S -> 'Sa', T -> 'b' }
+    S = S
+    ";
+        let r = parser::parse_t3grammar_definition(&mut s);
+        assert!(r.is_err());
+    }
+
+    #[test]
     fn parse_t3grammar_definition_with_missing_but_duplicated_parts_should_fail() {
         let mut s = "
     Sigma = { 'a', 'b' }
@@ -465,7 +544,7 @@ mod tests {
     }
 
     #[test]
-    fn produces_returns_false_for_impossible_word() {
+    fn no_productions_are_found_for_impossible_word() {
         let mut s = "
     V = { S }
     Sigma = { 'a' }
@@ -477,7 +556,7 @@ mod tests {
     }
 
     #[test]
-    fn produces_works_for_single_terminal() {
+    fn productions_are_found_for_single_terminal() {
         let mut s = "
     V = { S }
     Sigma = { 'a', 'b' }
@@ -490,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn produces_works_for_2_terminals() {
+    fn productions_are_found_for_2_terminals() {
         let mut s = "
     V = { S, T }
     Sigma = { 'a', 'b' }
@@ -506,7 +585,23 @@ mod tests {
     }
 
     #[test]
-    fn produces_works_for_n_terminals() {
+    fn productions_are_found_for_2_terminals_left_reg() {
+        let mut s = "
+    V = { S, T }
+    Sigma = { 'a', 'b' }
+    P = { S -> 'Tb', T ->'a' }
+    S = S
+    ";
+        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let r = &g.try_find_productions("ab")[0];
+        assert_eq!(
+            r,
+            &vec![("S".into(), "Tb".into()), ("T".into(), "a".into())]
+        );
+    }
+
+    #[test]
+    fn productions_are_found_for_n_terminals() {
         let mut s = "
     V = { S, T }
     Sigma = { 'a', 'b', 'c' }
@@ -519,7 +614,20 @@ mod tests {
     }
 
     #[test]
-    fn produces_works_for_epsilon() {
+    fn productions_are_found_for_n_terminals_left_reg() {
+        let mut s = "
+    V = { S, T }
+    Sigma = { 'a', 'b', 'c' }
+    P = { S -> 'Tb', S -> 'Tc', T -> 'Tb', T -> 'a' }
+    S = S
+    ";
+        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        assert!(!g.try_find_productions("abbbbb").is_empty());
+        assert!(!g.try_find_productions("abbbbbc").is_empty());
+    }
+
+    #[test]
+    fn production_work_for_epsilon() {
         let mut s = "
     V = { S, T }
     Sigma = { 'a', 'b', 'c' }
@@ -530,5 +638,19 @@ mod tests {
         assert!(!g.try_find_productions("abbbbb").is_empty());
         let r = &g.try_find_productions("a")[0];
         assert_eq!(r, &vec![("S".into(), "aT".into()), ("T".into(), "".into())]);
+    }
+
+    #[test]
+    fn production_work_for_epsilon_left_reg() {
+        let mut s = "
+    V = { S, T }
+    Sigma = { 'a', 'b', 'c' }
+    P = { S -> 'Tb', S -> 'Ta', T -> 'a', T -> 'Tb', T -> '' }
+    S = S
+    ";
+        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        assert!(!g.try_find_productions("abbbbb").is_empty());
+        let r = &g.try_find_productions("a")[0];
+        assert_eq!(r, &vec![("S".into(), "Ta".into()), ("T".into(), "".into())]);
     }
 }
