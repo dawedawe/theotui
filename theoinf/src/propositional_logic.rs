@@ -47,14 +47,11 @@ impl Expr {
                 | Expr::Xor(a, b)
                 | Expr::Equi(a, b)
                 | Expr::Impl(a, b) => {
-                    let a_vars = a.collect_vars();
-                    a_vars.into_iter().for_each(|v| vars.push(v));
-                    let b_vars = b.collect_vars();
-                    b_vars.into_iter().for_each(|v| vars.push(v));
+                    helper(a, vars);
+                    helper(b, vars);
                 }
                 Expr::Paren(a) => {
-                    let a_vars = a.collect_vars();
-                    a_vars.into_iter().for_each(|v| vars.push(v));
+                    helper(a, vars);
                 }
                 Expr::True => (),
                 Expr::False => (),
@@ -71,7 +68,7 @@ impl Expr {
         F: Fn(Expr, Expr) -> Expr,
     {
         if exprs.is_empty() {
-            panic!("can't create disjunction out of empty expressions");
+            panic!("can't reduce empty expressions");
         } else if exprs.len() == 1 {
             exprs[0].clone()
         } else {
@@ -209,8 +206,8 @@ pub fn eval(assignment: &Assignment, expr: &Expr) -> bool {
 
 /// Parse and evaluate the given formula using the given [Assignment].
 pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
-    let input = formula.to_string();
-    match pratt_parser(&mut input.as_str()) {
+    let mut input = formula;
+    match pratt_parser(&mut input) {
         Ok(expr) => Ok(eval(assignment, &expr)),
         Err(e) => Result::Err(e.to_string()),
     }
@@ -220,7 +217,7 @@ pub fn run(formula: &str, assignment: &Assignment) -> Result<bool, String> {
 pub type Assignment = HashMap<String, bool>;
 
 /// Truth table containing assignments and their result.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct TruthTable {
     pub rows: Vec<(Assignment, bool)>,
 }
@@ -351,15 +348,9 @@ impl TruthTable {
     }
 }
 
-impl Default for TruthTable {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Construct all possible [Assignment]s for the given vars.
 pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
-    let mut vars = vars.clone();
+    let mut vars = vars;
     vars.sort();
     vars.reverse();
     let mut assignments = vec![];
@@ -379,8 +370,8 @@ pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
 
 /// Construct the [TruthTable] for all possible assignments for the given formula.
 pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
-    let input = formula.to_string();
-    match pratt_parser(&mut input.as_str()) {
+    let mut input = formula;
+    match pratt_parser(&mut input) {
         Ok(expr) => {
             let vars = expr.collect_vars();
             let assignments = all_assignments(vars);
@@ -732,7 +723,6 @@ mod tests {
         let terms =
             min_terms("(!a & !b & c) | (!a & b & !c) | (a & !b & !c) | (a & b & c)").unwrap();
         assert_eq!(terms.len(), 4);
-        assert_eq!(terms[0].to_string(), "!a & !b & c");
         assert_eq!(terms[0].to_string(), "!a & !b & c");
         assert_eq!(terms[1].to_string(), "!a & b & !c");
         assert_eq!(terms[2].to_string(), "a & !b & !c");
