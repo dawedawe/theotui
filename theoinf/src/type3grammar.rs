@@ -14,17 +14,17 @@ pub mod parser {
 
     use crate::type3grammar::{NonTerminal, ProductionRule, Terminal, Type3Grammar};
 
-    fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
-        trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
-    }
-
     /// Expressions of the type-3 grammar definition.
-    #[derive(Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Expr {
         NonTerms(Vec<String>),
         Sigma(Vec<String>),
         Productions(Vec<ProductionRule>),
         Start(String),
+    }
+
+    fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
+        trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
     /// Parses a non-terminals definition like `V = { S, T, W }`
@@ -86,10 +86,7 @@ pub mod parser {
     {
         let element = delimited("'", production_rhs(), cut_err("'"));
         let tuple = (nonterminal_name(), whitespace_wrapped("->"), element);
-        trace(
-            "production_rule",
-            tuple.map(|(nt, _arrow, rhs)| (nt, rhs.trim_matches('\''))),
-        )
+        trace("production_rule", tuple.map(|(nt, _arrow, rhs)| (nt, rhs)))
     }
 
     /// Parses a production set like `{ S -> 'aT', T -> 'b' }`
@@ -136,9 +133,7 @@ pub mod parser {
 
     /// Parse a [Type3Grammar] definition (V, Sigma, P, S)
     pub fn parse_t3grammar_definition(input: &str) -> Result<Type3Grammar, String> {
-        let input = input.to_string();
-        let mut input = input.as_str();
-
+        let mut input = input;
         let mut nonterminals: Option<HashSet<NonTerminal>> = None;
         let mut sigma: Option<HashSet<Terminal>> = None;
         let mut productions: Option<HashSet<(NonTerminal, String)>> = None;
@@ -188,7 +183,7 @@ pub type Rhs = String;
 pub type ProductionRule = (NonTerminal, Rhs);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Kind {
+pub enum Kind {
     Left,
     Right,
 }
@@ -302,6 +297,11 @@ impl Type3Grammar {
     /// The productions of the [Type3Grammar].
     pub fn productions(&self) -> &HashSet<(String, String)> {
         &self.productions
+    }
+
+    /// The [Kind] of the [Type3Grammar].
+    pub fn kind(&self) -> &Kind {
+        &self.kind
     }
 
     /// Finds and applies possbile production rules. Returns tuples of remaining word, remaining
