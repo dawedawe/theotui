@@ -1,3 +1,26 @@
+## [0.4.1] - 2026-05-01
+
+### 🚀 Features
+
+- *(t3grammar)* Add support for left-regular grammars
+- *(t3grammar)* Improve error reporting from parser
+
+### 🐛 Bug Fixes
+
+- *(t3grammar)* Handle multiline definition elements
+- *(t3grammar)* Add missing Kind getter
+- *(dfa)* Handle multiline definition elements
+- *(set theory)* Handle multiline expressions
+
+### 📚 Documentation
+
+- Update CHANGELOG.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump crate versions
+- Run fmt and clippy in ci
+
 ## [0.4.0] - 2026-04-28
 
 ### 🚀 Features
