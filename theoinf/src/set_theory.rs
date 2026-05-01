@@ -9,7 +9,6 @@ use winnow::combinator::alt;
 use winnow::combinator::cut_err;
 use winnow::combinator::delimited;
 use winnow::combinator::dispatch;
-use winnow::combinator::eof;
 use winnow::combinator::expression;
 use winnow::combinator::fail;
 use winnow::combinator::opt;
@@ -179,8 +178,8 @@ fn element_parser<'i>(precedence: i64) -> impl Parser<&'i str, SetElement, ErrMo
     }
 }
 
-/// Parse the input to an [Expr].
-pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
+/// Parse an [Expr].
+pub fn parse_expr(i: &mut &str) -> ModalResult<Expr> {
     fn parser<'i>(precedence: i64) -> impl Parser<&'i str, Expr, ErrMode<ContextError>> {
         move |i: &mut &str| -> Result<Expr, ErrMode<ContextError>> {
             use Infix::Left;
@@ -262,16 +261,7 @@ pub fn pratt_parser(i: &mut &str) -> ModalResult<Expr> {
         }
     }
 
-    match parser(0).parse_next(i) {
-        Ok(r) => {
-            if eof::<&str, ErrMode<ContextError>>.parse_next(i).is_ok() {
-                Ok(r)
-            } else {
-                Err(ErrMode::Cut(ContextError::default()))
-            }
-        }
-        Err(e) => Err(e),
-    }
+    parser(0).parse_next(i)
 }
 
 fn char_or_num_element<'i>(input: &mut &'i str) -> ModalResult<&'i str> {
@@ -461,15 +451,18 @@ pub fn eval(assignment: &mut Assignment, expr: &Expr) -> Result<Expr, String> {
 
 /// Parse and evaluate the given term.
 pub fn run(term: &str) -> Result<Expr, String> {
-    let lines = term.trim().lines();
+    let mut input = term;
     let mut a = HashMap::new();
-    let results: Vec<_> = lines
-        .into_iter()
-        .map(|mut line| match pratt_parser(&mut line) {
+    let mut results: Vec<_> = vec![];
+
+    while !input.is_empty() {
+        let r = match parse_expr(&mut input) {
             Ok(expr) => eval(&mut a, &expr),
             Err(e) => Result::Err(e.to_string()),
-        })
-        .collect();
+        };
+        results.push(r);
+    }
+
     if results.is_empty() {
         Result::Err("no input given".into())
     } else {
@@ -488,7 +481,7 @@ mod tests {
 
     #[test]
     fn parsing_empty_input_errors() {
-        let expr = pratt_parser(&mut "");
+        let expr = parse_expr(&mut "");
         assert!(expr.is_err());
     }
 
@@ -501,23 +494,23 @@ mod tests {
     #[test]
     fn parsing_an_identifier_works() {
         let mut input = "a";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         assert_eq!(Expr::Var("a".into()), expr.unwrap());
         assert_eq!("", input);
     }
 
     #[test]
-    fn parsing_a_dangling_var_should_fail() {
-        let mut input = "a b";
-        let expr = pratt_parser(&mut input);
+    fn parsing_a_dangling_invalid_expr_should_fail() {
+        let input = "{1,2,3} {";
+        let expr = run(input);
         assert!(expr.is_err());
     }
 
     #[test]
     fn parsing_an_empty_set_literal_works() {
         let mut input = "{}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         assert_eq!(Expr::SetLiteral([].into()), expr.unwrap());
         assert_eq!("", input);
@@ -526,7 +519,7 @@ mod tests {
     #[test]
     fn parsing_a_singleton_set_literal_works() {
         let mut input = "{a}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         assert_eq!(Expr::SetLiteral(["a".into()].into()), expr.unwrap());
         assert_eq!("", input);
@@ -535,7 +528,7 @@ mod tests {
     #[test]
     fn parsing_a_two_element_set_literal_works() {
         let mut input = "{a,b}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
             Expr::SetLiteral(["a".into(), "b".into()].into()),
@@ -547,7 +540,7 @@ mod tests {
     #[test]
     fn parsing_a_three_element_set_literal_works() {
         let mut input = "{a,2,{}}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         assert_eq!(
             Expr::SetLiteral(["a".into(), "2".into(), "{}".into()].into()),
@@ -559,7 +552,7 @@ mod tests {
     #[test]
     fn parsing_a_union_works() {
         let mut input = "{ a , b,c} u {d,e}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         let s0 = Expr::SetLiteral(["a".into(), "b".into(), "c".into()].into());
         let s1 = Expr::SetLiteral(["d".into(), "e".into()].into());
@@ -570,7 +563,7 @@ mod tests {
     #[test]
     fn parsing_an_intersection_works() {
         let mut input = "{ a } n {}";
-        let expr = pratt_parser(&mut input);
+        let expr = parse_expr(&mut input);
         assert!(expr.is_ok());
         let s0 = Expr::SetLiteral(["a".into()].into());
         let s1 = Expr::SetLiteral([].into());
@@ -657,7 +650,7 @@ mod tests {
 
     #[test]
     fn set_literal_from_empty_works() {
-        let nested = pratt_parser(&mut "{{{ {}, b }}}");
+        let nested = parse_expr(&mut "{{{ {}, b }}}");
         assert!(nested.is_ok());
         match nested.unwrap() {
             Expr::SetLiteral(inner1) => {
@@ -681,7 +674,7 @@ mod tests {
 
     #[test]
     fn parsing_nested_empty_works() {
-        let s = pratt_parser(&mut "{ {} }");
+        let s = parse_expr(&mut "{ {} }");
         assert!(s.is_ok());
         let s = s.unwrap();
         let mut hash_set = HashSet::new();
@@ -692,7 +685,7 @@ mod tests {
 
     #[test]
     fn parsing_double_nested_empty_works() {
-        let s = pratt_parser(&mut "{ { {} } }");
+        let s = parse_expr(&mut "{ { {} } }");
         assert!(s.is_ok());
         let s = s.unwrap();
         let mut hash_set1 = HashSet::new();
@@ -705,7 +698,7 @@ mod tests {
 
     #[test]
     fn parsing_a_declaration_works() {
-        let s = pratt_parser(&mut "A = { a, b }");
+        let s = parse_expr(&mut "A = { a, b }");
         assert!(s.is_ok());
         let s = s.unwrap();
         let lit = Expr::SetLiteral(["a".into(), "b".into()].into());
@@ -715,7 +708,7 @@ mod tests {
 
     #[test]
     fn parsing_a_complement_works() {
-        let ast = pratt_parser(&mut "!A");
+        let ast = parse_expr(&mut "!A");
         assert!(ast.is_ok());
         let s = ast.unwrap();
         let comp = Expr::Complement(Box::new(Expr::Var("A".into())));
@@ -729,7 +722,7 @@ mod tests {
         let mut assignment: Assignment = HashMap::new();
         assignment.insert("A".into(), lit1.clone());
         assignment.insert("B".into(), lit2.clone());
-        let expr = pratt_parser(&mut "A");
+        let expr = parse_expr(&mut "A");
         assert!(expr.is_ok());
         let expr = expr.unwrap();
         let r = eval(&mut assignment, &expr);
@@ -853,7 +846,9 @@ L1 \\ L2 == L1 n !L2";
 
     #[test]
     fn evaluation_of_equals_with_bools_works() {
-        let term = "{a,b} c {a,b,c} == {1,2,3} c= {1,2,3}";
+        let term = "{a,b} c {a,b,c}
+                    ==
+                    {1,2,3} c= {1,2,3}";
         let r = run(term);
         assert!(r.is_ok());
         assert_eq!(Expr::Bool(true), r.unwrap());
