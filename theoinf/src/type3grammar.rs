@@ -7,7 +7,7 @@ pub mod parser {
         ModalResult, Parser,
         ascii::multispace0,
         combinator::{alt, cut_err, delimited, separated, trace},
-        error::{ContextError, ErrMode},
+        error::{ContextError, ErrMode, StrContext},
         stream::AsChar,
         token::take_while,
     };
@@ -38,9 +38,11 @@ pub mod parser {
             comma_sep_list,
             delimited(multispace0, cut_err("}"), multispace0),
         );
-        let mut decl = (identifier, equals, setp).map(|(_, _, x): (_, _, Vec<&str>)| {
-            Expr::NonTerms(x.iter().map(|s| s.to_string()).collect())
-        });
+        let mut decl = (identifier, equals, setp)
+            .context(StrContext::Label("V definition"))
+            .map(|(_, _, x): (_, _, Vec<&str>)| {
+                Expr::NonTerms(x.iter().map(|s| s.to_string()).collect())
+            });
         decl.parse_next(input)
     }
 
@@ -56,9 +58,11 @@ pub mod parser {
             comma_sep_list,
             delimited(multispace0, cut_err("}"), multispace0),
         );
-        let mut decl = (identifier, equals, setp).map(|(_, _, x): (_, _, Vec<&str>)| {
-            Expr::Sigma(x.iter().map(|s| s.to_string()).collect())
-        });
+        let mut decl = (identifier, equals, setp)
+            .context(StrContext::Label("Sigma definition"))
+            .map(|(_, _, x): (_, _, Vec<&str>)| {
+                Expr::Sigma(x.iter().map(|s| s.to_string()).collect())
+            });
         decl.parse_next(input)
     }
 
@@ -108,6 +112,7 @@ pub mod parser {
         let identifier = whitespace_wrapped("P");
         let equals = whitespace_wrapped("=");
         (identifier, equals, production_set())
+            .context(StrContext::Label("P definition"))
             .map(|(_, _, x): (_, _, Vec<(&str, &str)>)| {
                 Expr::Productions(
                     x.iter()
@@ -124,6 +129,7 @@ pub mod parser {
         let equals = whitespace_wrapped("=");
         let state = delimited(multispace0, nonterminal_name(), multispace0);
         (identifier, equals, state)
+            .context(StrContext::Label("S definition"))
             .map(|(_, _, x): (&str, &str, &str)| Expr::Start(x.to_string()))
             .parse_next(input)
     }
