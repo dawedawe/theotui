@@ -319,7 +319,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         }
         Msg::DfaMsg(DfaMsg::Eval) => {
             let def = model.dfa_state.definition_textarea.lines().join("\n");
-            let dfa = dfa::parser::parse_dfa_definition(&mut def.as_str());
+            let dfa = dfa::parser::parse_dfa_definition(def.as_str());
 
             let (result, transitions) = match dfa {
                 Ok(dfa) => {
