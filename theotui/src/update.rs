@@ -346,7 +346,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         }
         Msg::T3GrammarMsg(T3GrammarMsg::Eval) => {
             let def = model.t3grammar_state.definition_textarea.lines().join("\n");
-            let g = type3grammar::parser::parse_t3grammar_definition(&mut def.as_str());
+            let g = type3grammar::parser::parse_t3grammar_definition(def.as_str());
 
             let (result, transitions) = match g {
                 Ok(g) => {

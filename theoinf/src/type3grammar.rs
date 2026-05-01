@@ -12,14 +12,23 @@ pub mod parser {
         token::take_while,
     };
 
-    use crate::type3grammar::{NonTerminal, Terminal, Type3Grammar};
+    use crate::type3grammar::{NonTerminal, ProductionRule, Terminal, Type3Grammar};
 
     fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
         trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
+    /// Expressions of the type-3 grammar definition.
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum Expr {
+        NonTerms(Vec<String>),
+        Sigma(Vec<String>),
+        Productions(Vec<ProductionRule>),
+        Start(String),
+    }
+
     /// Parses a non-terminals definition like `V = { S, T, W }`
-    pub fn parse_v_definition<'s>(input: &'s mut &str) -> ModalResult<Vec<&'s str>> {
+    pub fn parse_v_definition(input: &mut &str) -> ModalResult<Expr> {
         let identifier = whitespace_wrapped("V");
         let equals = whitespace_wrapped("=");
         let separator = whitespace_wrapped(",");
@@ -29,12 +38,14 @@ pub mod parser {
             comma_sep_list,
             delimited(multispace0, cut_err("}"), multispace0),
         );
-        let mut decl = (identifier, equals, setp).map(|(_, _, x)| x);
+        let mut decl = (identifier, equals, setp).map(|(_, _, x): (_, _, Vec<&str>)| {
+            Expr::NonTerms(x.iter().map(|s| s.to_string()).collect())
+        });
         decl.parse_next(input)
     }
 
     /// Parses a Sigma definition like `Sigma = { 'a', 'b', 'c' }`
-    pub fn parse_sigma_definition<'s>(input: &'s mut &str) -> ModalResult<Vec<&'s str>> {
+    pub fn parse_sigma_definition(input: &mut &str) -> ModalResult<Expr> {
         let identifier = whitespace_wrapped("Sigma");
         let equals = whitespace_wrapped("=");
         let element = delimited("'", terminal_symbol(), cut_err("'"));
@@ -45,16 +56,18 @@ pub mod parser {
             comma_sep_list,
             delimited(multispace0, cut_err("}"), multispace0),
         );
-        let mut decl = (identifier, equals, setp).map(|(_, _, x)| x);
+        let mut decl = (identifier, equals, setp).map(|(_, _, x): (_, _, Vec<&str>)| {
+            Expr::Sigma(x.iter().map(|s| s.to_string()).collect())
+        });
         decl.parse_next(input)
     }
 
     pub fn nonterminal_name<'s>() -> impl Parser<&'s str, &'s str, ErrMode<ContextError>> {
-        take_while(1.., |c: char| c.is_alpha() && c.is_uppercase())
+        take_while(1..=1, |c: char| c.is_alpha() && c.is_uppercase())
     }
 
     pub fn terminal_symbol<'s>() -> impl Parser<&'s str, &'s str, ErrMode<ContextError>> {
-        take_while(1.., |c: char| c.is_alpha() && c.is_lowercase())
+        take_while(1..=1, |c: char| c.is_alpha() && c.is_lowercase())
     }
 
     /// Parses the right side of a right or left-regular production like aT or Ta or a or epsilon
@@ -91,69 +104,69 @@ pub mod parser {
     }
 
     /// Parse a productions definition like `P = { (S, 'aT'), (T, 'b') }`
-    pub fn parse_productions_definition<'s>(
-        input: &'s mut &str,
-    ) -> ModalResult<Vec<(&'s str, &'s str)>> {
+    pub fn parse_productions_definition(input: &mut &str) -> ModalResult<Expr> {
         let identifier = whitespace_wrapped("P");
         let equals = whitespace_wrapped("=");
         (identifier, equals, production_set())
-            .map(|(_, _, x)| x)
+            .map(|(_, _, x): (_, _, Vec<(&str, &str)>)| {
+                Expr::Productions(
+                    x.iter()
+                        .map(|(l, r)| (l.to_string(), r.to_string()))
+                        .collect(),
+                )
+            })
             .parse_next(input)
     }
 
     /// Parse a start symbol definition like `S = S`
-    pub fn parse_start_nonterminal_definition<'s>(input: &'s mut &str) -> ModalResult<&'s str> {
+    pub fn parse_start_nonterminal_definition(input: &mut &str) -> ModalResult<Expr> {
         let identifier = whitespace_wrapped("S");
         let equals = whitespace_wrapped("=");
         let state = delimited(multispace0, nonterminal_name(), multispace0);
         (identifier, equals, state)
-            .map(|(_, _, x)| x)
+            .map(|(_, _, x): (&str, &str, &str)| Expr::Start(x.to_string()))
             .parse_next(input)
     }
 
     /// Parse a [Type3Grammar] definition (V, Sigma, P, S)
-    pub fn parse_t3grammar_definition(input: &mut &str) -> Result<Type3Grammar, String> {
-        let lines: Vec<String> = input
-            .lines()
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .collect();
-        if lines.len() != 4 {
-            return Err("Incomplete definition".into());
-        }
+    pub fn parse_t3grammar_definition(input: &str) -> Result<Type3Grammar, String> {
+        let input = input.to_string();
+        let mut input = input.as_str();
 
-        let mut nonterminals: Option<HashSet<NonTerminal>> = None; // V
+        let mut nonterminals: Option<HashSet<NonTerminal>> = None;
         let mut sigma: Option<HashSet<Terminal>> = None;
         let mut productions: Option<HashSet<(NonTerminal, String)>> = None;
         let mut start: Option<NonTerminal> = None;
 
-        for line in lines {
-            let mut line: &str = &line;
-            if line.starts_with("Sigma") {
-                let r =
-                    parse_sigma_definition(&mut line).map_err(|_| "Invalid 'Sigma' definition.")?;
-                sigma = Some(r.into_iter().map(|s| s.to_string()).collect());
-            } else if line.starts_with("S=") || line.starts_with("S ") {
-                let r = parse_start_nonterminal_definition(&mut line)
-                    .map_err(|_| "Invalid 'S' definition.")?;
-                start = Some(r.to_string());
-            } else if line.starts_with("V") {
-                let r = parse_v_definition(&mut line).map_err(|_| "Invalid 'V' definition.")?;
-                nonterminals = Some(r.into_iter().map(|s| s.to_string()).collect());
-            } else if line.starts_with("P") {
-                let r = parse_productions_definition(&mut line)
-                    .map_err(|_| "Invalid 'P' definition.")?;
-                productions = Some(
-                    r.into_iter()
-                        .map(|(nt, rhs)| (nt.to_string(), rhs.to_string()))
-                        .collect(),
-                );
-            } else {
-                return Err(format!("Can't parse line '{line}'."));
+        let mut alt_parser = alt((
+            parse_sigma_definition,
+            parse_v_definition,
+            parse_productions_definition,
+            parse_start_nonterminal_definition,
+        ));
+
+        for _ in 0..4 {
+            let r = alt_parser.parse_next(&mut input);
+            match r {
+                Ok(expr) => match expr {
+                    Expr::NonTerms(nonterms) => {
+                        nonterminals = Some(nonterms.into_iter().collect());
+                    }
+                    Expr::Sigma(terms) => {
+                        sigma = Some(terms.into_iter().collect());
+                    }
+                    Expr::Productions(prods) => {
+                        productions = Some(prods.into_iter().collect());
+                    }
+                    Expr::Start(s) => start = Some(s),
+                },
+                Err(s) => return Err(s.to_string()),
             }
         }
 
-        if let (Some(nonterminals), Some(sigma), Some(productions), Some(start)) =
+        if !input.trim().is_empty() {
+            Err("bad definition".into())
+        } else if let (Some(nonterminals), Some(sigma), Some(productions), Some(start)) =
             (nonterminals, sigma, productions, start)
         {
             Type3Grammar::new(nonterminals, sigma, productions, start)
@@ -364,6 +377,8 @@ impl Type3Grammar {
 mod tests {
     use winnow::Parser;
 
+    use crate::type3grammar::parser::Expr;
+
     use super::*;
 
     #[test]
@@ -411,7 +426,10 @@ mod tests {
     fn parse_sigma_works() {
         let mut s = "Sigma = { 'a' , 'b','c' } ";
         let symbols = parser::parse_sigma_definition(&mut s).unwrap();
-        assert_eq!(symbols, vec!["a", "b", "c"]);
+        assert_eq!(
+            symbols,
+            Expr::Sigma(vec!["a".into(), "b".into(), "c".into()])
+        );
     }
 
     #[test]
@@ -425,7 +443,7 @@ mod tests {
     fn parse_v_definition_works() {
         let mut s = "V = { S , T,W  } ";
         let v = parser::parse_v_definition(&mut s).unwrap();
-        assert_eq!(v, vec!["S", "T", "W"]);
+        assert_eq!(v, Expr::NonTerms(vec!["S".into(), "T".into(), "W".into()]));
     }
 
     #[test]
@@ -439,7 +457,7 @@ mod tests {
     fn parse_start_state_works() {
         let mut s = "S = S";
         let nt = parser::parse_start_nonterminal_definition(&mut s).unwrap();
-        assert_eq!(nt, "S");
+        assert_eq!(nt, Expr::Start("S".to_string()));
     }
 
     #[test]
@@ -466,7 +484,14 @@ mod tests {
     fn parse_production_definition_works_for_right_regular() {
         let mut s = "P = { S-> 'aT', T ->'b', B -> '' }";
         let r = parser::parse_productions_definition(&mut s).unwrap();
-        assert_eq!(r, vec![("S", "aT"), ("T", "b"), ("B", "")]);
+        assert_eq!(
+            r,
+            Expr::Productions(vec![
+                ("S".into(), "aT".into()),
+                ("T".into(), "b".into()),
+                ("B".into(), "".into())
+            ])
+        );
     }
 
     #[test]
@@ -481,18 +506,25 @@ mod tests {
     fn parse_production_definition_works_for_left_regular() {
         let mut s = "P = { S -> 'Ta', T -> 'b', B -> '' }";
         let r = parser::parse_productions_definition(&mut s).unwrap();
-        assert_eq!(r, vec![("S", "Ta"), ("T", "b"), ("B", "")]);
+        assert_eq!(
+            r,
+            Expr::Productions(vec![
+                ("S".into(), "Ta".into()),
+                ("T".into(), "b".into()),
+                ("B".into(), "".into())
+            ])
+        );
     }
 
     #[test]
     fn parse_t3grammar_definition_works() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b'  }
     P = { S -> 'aT', T -> 'b' }
     S = S
     ";
-        let r = parser::parse_t3grammar_definition(&mut s);
+        let r = parser::parse_t3grammar_definition(s);
         assert!(r.is_ok());
         let g = r.unwrap();
         assert_eq!(
@@ -509,74 +541,74 @@ mod tests {
 
     #[test]
     fn parse_left_regular_t3grammar_works() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b'  }
     P = { S -> 'Ta' }
     S = S
     ";
-        let r = parser::parse_t3grammar_definition(&mut s);
+        let r = parser::parse_t3grammar_definition(s);
         assert!(r.is_ok());
     }
 
     #[test]
     fn parse_t3grammar_with_left_right_mixed_should_fail() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b'  }
     P = { S -> 'aT', S -> 'Sa', T -> 'b' }
     S = S
     ";
-        let r = parser::parse_t3grammar_definition(&mut s);
+        let r = parser::parse_t3grammar_definition(s);
         assert!(r.is_err());
     }
 
     #[test]
     fn parse_t3grammar_definition_with_missing_but_duplicated_parts_should_fail() {
-        let mut s = "
+        let s = "
     Sigma = { 'a', 'b' }
     V = { S, T, W }
     Sigma = { 'a', 'b' }
     S = S
     ";
-        let r = parser::parse_t3grammar_definition(&mut s);
+        let r = parser::parse_t3grammar_definition(s);
         assert!(r.is_err());
     }
 
     #[test]
     fn no_productions_are_found_for_impossible_word() {
-        let mut s = "
+        let s = "
     V = { S }
     Sigma = { 'a' }
     P = { S -> 'a' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         assert!(g.try_find_productions("ab").is_empty());
     }
 
     #[test]
     fn productions_are_found_for_single_terminal() {
-        let mut s = "
+        let s = "
     V = { S }
     Sigma = { 'a', 'b' }
     P = { S -> 'a', S -> 'b' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         let r = &g.try_find_productions("a")[0];
         assert_eq!(r, &vec![("S".into(), "a".into())]);
     }
 
     #[test]
     fn productions_are_found_for_2_terminals() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b' }
     P = { S -> 'aT', T ->'b' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         let r = &g.try_find_productions("ab")[0];
         assert_eq!(
             r,
@@ -586,13 +618,13 @@ mod tests {
 
     #[test]
     fn productions_are_found_for_2_terminals_left_reg() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b' }
     P = { S -> 'Tb', T ->'a' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         let r = &g.try_find_productions("ab")[0];
         assert_eq!(
             r,
@@ -602,39 +634,39 @@ mod tests {
 
     #[test]
     fn productions_are_found_for_n_terminals() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b', 'c' }
     P = { S -> 'aT', T -> 'b', T -> 'bT', T -> 'c' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         assert!(!g.try_find_productions("abbbbb").is_empty());
         assert!(!g.try_find_productions("abbbbbc").is_empty());
     }
 
     #[test]
     fn productions_are_found_for_n_terminals_left_reg() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b', 'c' }
     P = { S -> 'Tb', S -> 'Tc', T -> 'Tb', T -> 'a' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         assert!(!g.try_find_productions("abbbbb").is_empty());
         assert!(!g.try_find_productions("abbbbbc").is_empty());
     }
 
     #[test]
     fn production_work_for_epsilon() {
-        let mut s = "
+        let s = "
     V = { S, T }
     Sigma = { 'a', 'b', 'c' }
     P = { S -> 'aT', T -> 'b', T -> 'bT', T -> '' }
     S = S
     ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         assert!(!g.try_find_productions("abbbbb").is_empty());
         let r = &g.try_find_productions("a")[0];
         assert_eq!(r, &vec![("S".into(), "aT".into()), ("T".into(), "".into())]);
@@ -642,15 +674,34 @@ mod tests {
 
     #[test]
     fn production_work_for_epsilon_left_reg() {
-        let mut s = "
-    V = { S, T }
-    Sigma = { 'a', 'b', 'c' }
-    P = { S -> 'Tb', S -> 'Ta', T -> 'a', T -> 'Tb', T -> '' }
-    S = S
-    ";
-        let g = parser::parse_t3grammar_definition(&mut s).unwrap();
+        let s = "
+            V = { S, T }
+            Sigma = { 'a',
+                      'b',
+                      'c' }
+            P = { S -> 'Tb',
+                  S -> 'Ta',
+                  T -> 'a',
+                  T -> 'Tb',
+                  T -> '' }
+            S = S ";
+        let g = parser::parse_t3grammar_definition(s).unwrap();
         assert!(!g.try_find_productions("abbbbb").is_empty());
         let r = &g.try_find_productions("a")[0];
         assert_eq!(r, &vec![("S".into(), "Ta".into()), ("T".into(), "".into())]);
+    }
+
+    #[test]
+    fn invalid_prefix_should_fail() {
+        let s = "xxx V = { S, T } Sigma = { 'a', 'b', 'c' } P = { S -> 'Tb', S -> 'Ta', T -> 'a', T -> 'Tb', T -> '' } S = S ";
+        let r = parser::parse_t3grammar_definition(s);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn invalid_postfix_should_fail() {
+        let s = "V = { S, T } Sigma = { 'a', 'b', 'c' } P = { S -> 'Tb', S -> 'Ta', T -> 'a', T -> 'Tb', T -> '' } S = S xxx";
+        let r = parser::parse_t3grammar_definition(s);
+        assert!(r.is_err());
     }
 }
