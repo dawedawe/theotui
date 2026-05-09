@@ -12,6 +12,7 @@ pub mod parser {
     };
 
     use crate::dfa::{Dfa, State, Symbol};
+    use crate::parser_utils::whitespace_wrapped;
 
     /// Expressions of the [Dfa] definition.
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,10 +22,6 @@ pub mod parser {
         Start(State),
         FinalStates(Vec<State>),
         Delta(Vec<(String, Symbol, String)>),
-    }
-
-    fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
-        trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
     /// Parses a Sigma definition like `Sigma = { 'a', 'b', 'c' }`

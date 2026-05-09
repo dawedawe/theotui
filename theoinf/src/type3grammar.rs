@@ -12,7 +12,10 @@ pub mod parser {
         token::take_while,
     };
 
-    use crate::type3grammar::{NonTerminal, ProductionRule, Terminal, Type3Grammar};
+    use crate::{
+        parser_utils::whitespace_wrapped,
+        type3grammar::{NonTerminal, ProductionRule, Terminal, Type3Grammar},
+    };
 
     /// Expressions of the type-3 grammar definition.
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,10 +24,6 @@ pub mod parser {
         Sigma(Vec<String>),
         Productions(Vec<ProductionRule>),
         Start(String),
-    }
-
-    fn whitespace_wrapped<'i>(s: &str) -> impl Parser<&'i str, &'i str, ErrMode<ContextError>> {
-        trace("whitespace_wrapped", delimited(multispace0, s, multispace0))
     }
 
     /// Parses a non-terminals definition like `V = { S, T, W }`
