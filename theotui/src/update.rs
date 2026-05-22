@@ -65,8 +65,12 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     match (model.selected_topic, key.code) {
         (_, KeyCode::Esc) => Some(Msg::Exit),
         (_, KeyCode::F(1)) => Some(Msg::ToggleHelp),
-        (_, KeyCode::Down) if model.focus == Focus::TopicList => Some(Msg::NextTab),
-        (_, KeyCode::Up) if model.focus == Focus::TopicList => Some(Msg::PrevTab),
+        (_, KeyCode::Down) | (_, KeyCode::Char('j')) if model.focus == Focus::TopicList => {
+            Some(Msg::NextTab)
+        }
+        (_, KeyCode::Up) | (_, KeyCode::Char('k')) if model.focus == Focus::TopicList => {
+            Some(Msg::PrevTab)
+        }
         (_, KeyCode::Tab) => Some(Msg::NextFocus),
         (_, KeyCode::BackTab) => Some(Msg::PrevFocus),
         (SelectedTopic::PropositionalLogic, KeyCode::Enter)
