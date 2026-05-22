@@ -6,6 +6,7 @@ Currently, there are parsers and interpreters for the following topics:
 - propositional logic
 - deterministic finite automata
 - type-3 grammars
+- type-2 grammars
 
 More will follow.  
 
@@ -26,4 +27,9 @@ A DFA can be defined and words can be tested for acceptance.
 
 A Type-3 grammar with right or left-regular production rules can be defined.  
 Words can be tested to find all possible production chains for them.
+
+## type-2 grammars
+
+A Type-2 grammar can be defined.  
+Words can be tested to find a possible production chain for them.
 

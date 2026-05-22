@@ -31,6 +31,7 @@ fn usage() -> ! {
     eprintln!("Usage: theotui [OPTIONS]");
     eprintln!("Options:");
     eprintln!("  --dfa file        Read DFA definition from file");
+    eprintln!("  --t2g file        Read Type-2 Grammar definition from file");
     eprintln!("  --t3g file        Read Type-3 Grammar definition from file");
     eprintln!("  --help            Print help");
     std::process::exit(0)
@@ -45,6 +46,18 @@ fn read_inputs_from_args(args: Vec<String>, model: &mut Model) {
                 model.dfa_state.definition_textarea.select_all();
                 model.dfa_state.definition_textarea.cut();
                 model.dfa_state.definition_textarea.insert_str(s);
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    } else if args.len() == 3 && args[1] == "--t2g" {
+        match fs::read_to_string(&args[2]) {
+            Result::Ok(s) => {
+                model.t2grammar_state.definition_textarea.select_all();
+                model.t2grammar_state.definition_textarea.cut();
+                model.t2grammar_state.definition_textarea.insert_str(s);
             }
             Err(e) => {
                 eprintln!("{e}");

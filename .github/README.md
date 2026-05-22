@@ -11,6 +11,7 @@ Currently the following topics are implemented:
 - propositional logic
 - deterministic finite automata
 - type-3 grammars
+- type-2 grammars
 
 More will follow.  
 The core logic, without the TUI part, can be used through the crate `theoinf`.
@@ -92,12 +93,40 @@ S = S
 
 <img src="https://codeberg.org/dawe/theotui/raw/commit/eabd98ad2ca3b542914f19bf863c7ab0a58113b8/theotui/images/type3grammar.png" alt="type-3 grammar">
 
+## type-2 grammars
+
+A `Type-2 Grammar` is defined with the usual 4 parts:
+
+- `V`, the set of non-terminals
+- `Sigma`, the set of terminals
+- `P`, the set of production rules
+- `S`, the start non-terminal                
+
+A production rule has one of the following forms:  
+
+- `T -> '(Sigma ∪ V)'*`  
+- `T -> ''` here the empty word epsilon is denoted as `''`
+
+Press `F1` to toggle the help next to the editor.  
+Press `F5` or `Enter` in the `Word` input to let your word be checked for a possible production.  
+With the argument `--t2g file.txt` a stored definition can be read from the given file at the start of theotui.  
+Here's a complete definition example:
+```
+V = { S }
+Sigma = { '(', ')' }
+P = { S -> '(S)', S -> '()', S -> '' }
+S = S"
+```
+
+<img src="https://codeberg.org/dawe/theotui/raw/commit/d60ae51253570746d3e64ed4c8d3a2a394880946/theotui/images/type2grammar.png" alt="type-2 grammar">
+
 ## Usage
 
 ```shell
 Usage: theotui [OPTIONS]
 Options:
   --dfa file        Read DFA definition from file
+  --t2g file        Read Type-2 Grammar definition from file
   --t3g file        Read Type-3 Grammar definition from file
   --help            Print help
 ```

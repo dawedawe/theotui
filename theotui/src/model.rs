@@ -19,6 +19,8 @@ pub(crate) enum SelectedTopic {
     Dfa,
     #[strum(to_string = "Type-3 Grammar")]
     T3Grammar,
+    #[strum(to_string = "Type-2 Grammar")]
+    T2Grammar,
 }
 
 impl SelectedTopic {
@@ -152,6 +154,46 @@ impl<'a> Default for T3GrammarModel<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum T2GrammarFocus {
+    #[default]
+    Definition,
+    WordInput,
+    Productions,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum T2GrammarResult {
+    #[default]
+    None,
+    Error(String),
+    Produced(bool),
+}
+
+#[derive(Debug)]
+pub(crate) struct T2GrammarModel<'a> {
+    pub(crate) definition_textarea: TextArea<'a>,
+    pub(crate) input_word_textarea: TextArea<'a>,
+    pub(crate) focus: T2GrammarFocus,
+    pub(crate) productions: TextArea<'a>,
+    pub(crate) result: T2GrammarResult,
+}
+
+impl<'a> Default for T2GrammarModel<'a> {
+    fn default() -> Self {
+        let mut default_def: TextArea<'a> = Default::default();
+        default_def
+            .insert_str("V = { S }\nSigma = { '(', ')' }\nP = { S -> '(S)', S -> '()' }\nS = S");
+        Self {
+            definition_textarea: default_def,
+            input_word_textarea: Default::default(),
+            focus: Default::default(),
+            productions: Default::default(),
+            result: Default::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) enum Focus {
     #[default]
     TopicList,
@@ -167,6 +209,7 @@ pub(crate) struct Model<'a> {
     pub(crate) settheory_state: SetTheoryModel<'a>,
     pub(crate) dfa_state: DfaModel<'a>,
     pub(crate) t3grammar_state: T3GrammarModel<'a>,
+    pub(crate) t2grammar_state: T2GrammarModel<'a>,
     pub(crate) show_help: bool,
 }
 
@@ -180,6 +223,7 @@ impl<'a> Default for Model<'a> {
             settheory_state: Default::default(),
             dfa_state: Default::default(),
             t3grammar_state: Default::default(),
+            t2grammar_state: Default::default(),
             show_help: Default::default(),
         }
     }
