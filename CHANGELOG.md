@@ -1,3 +1,23 @@
+## [0.4.2] - 2026-05-22
+
+### 🚀 Features
+
+- Support type-2 grammar
+- *(tui)* Support vi navigation in topic list
+
+### 🚜 Refactor
+
+- Cleanup propositional_logic.rs
+- Share parser code via parser_utils.rs
+
+### 📚 Documentation
+
+- Update CHANGELOG.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump crate versions
+
 ## [0.4.1] - 2026-05-01
 
 ### 🚀 Features
