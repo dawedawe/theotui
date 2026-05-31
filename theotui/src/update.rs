@@ -6,7 +6,7 @@ use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
 };
-use ratatui_textarea::CursorMove;
+use ratatui_textarea::{CursorMove, TextArea};
 use std::{collections::HashMap, ops::Deref};
 use theoinf::{
     dfa::{self, RunningDfa},
@@ -59,6 +59,13 @@ pub(crate) fn handle_event(model: &mut Model) -> color_eyre::Result<Option<Msg>>
         Event::Key(key) if key.kind == KeyEventKind::Press => Result::Ok(on_key_event(model, key)),
         _ => Result::Ok(None),
     }
+}
+
+fn is_nav_keycode(key_event: KeyEvent) -> bool {
+    matches!(
+        key_event.code,
+        KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right | KeyCode::Home | KeyCode::End
+    )
 }
 
 fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
@@ -147,7 +154,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
                     }
                 }
                 crate::model::T3GrammarFocus::Productions => {
-                    if key.code == KeyCode::Up || key.code == KeyCode::Down {
+                    if is_nav_keycode(key) {
                         model.t3grammar_state.productions.input(key);
                     }
                     None
@@ -170,8 +177,14 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
                     }
                 }
                 crate::model::T2GrammarFocus::Productions => {
-                    if key.code == KeyCode::Up || key.code == KeyCode::Down {
+                    if is_nav_keycode(key) {
                         model.t2grammar_state.productions.input(key);
+                    }
+                    None
+                }
+                crate::model::T2GrammarFocus::Cnf => {
+                    if is_nav_keycode(key) {
+                        model.t2grammar_state.cnf.input(key);
                     }
                     None
                 }
@@ -179,6 +192,14 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         }
         _ => None,
     }
+}
+
+fn set_textarea(productions: &mut TextArea, content: String) {
+    productions.select_all();
+    productions.cut();
+    productions.insert_str(content);
+    productions.move_cursor(CursorMove::Top);
+    productions.move_cursor(CursorMove::End);
 }
 
 pub(crate) fn update(model: &mut Model, msg: Msg) {
@@ -236,7 +257,10 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                     T2GrammarFocus::WordInput => {
                         model.t2grammar_state.focus = T2GrammarFocus::Productions
                     }
-                    T2GrammarFocus::Productions => model.focus = Focus::TopicList,
+                    T2GrammarFocus::Productions => {
+                        model.t2grammar_state.focus = T2GrammarFocus::Cnf
+                    }
+                    T2GrammarFocus::Cnf => model.focus = Focus::TopicList,
                 },
             },
         },
@@ -278,7 +302,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             SelectedTopic::T2Grammar => match model.focus {
                 Focus::TopicList => {
                     model.focus = Focus::TopicContent;
-                    model.t2grammar_state.focus = T2GrammarFocus::Productions
+                    model.t2grammar_state.focus = T2GrammarFocus::Cnf
                 }
                 Focus::TopicContent => match model.t2grammar_state.focus {
                     T2GrammarFocus::Definition => model.focus = Focus::TopicList,
@@ -287,6 +311,9 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                     }
                     T2GrammarFocus::Productions => {
                         model.t2grammar_state.focus = T2GrammarFocus::WordInput
+                    }
+                    T2GrammarFocus::Cnf => {
+                        model.t2grammar_state.focus = T2GrammarFocus::Productions
                     }
                 },
             },
@@ -447,37 +474,33 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             let def = model.t2grammar_state.definition_textarea.lines().join("\n");
             let g = type2grammar::parser::parse_t2grammar_definition(def.as_str());
 
-            let (result, transitions) = match g {
+            let (result, transitions, cnf) = match g {
                 Ok(g) => {
                     let word = model.t2grammar_state.input_word_textarea.lines();
                     let word = word.first().map(|w| w.deref()).unwrap_or("");
                     let productions = g.try_find_productions(word);
                     let has_produced = productions.is_some();
                     let chain = productions
-                        .map(|chain: Vec<(String, String)>| {
+                        .map(|chain: Vec<(String, Vec<String>)>| {
                             chain
                                 .iter()
-                                .map(|(lhs, rhs)| format!("{lhs} -> '{rhs}'"))
+                                .map(|(lhs, rhs)| {
+                                    let rhs = rhs.join("");
+                                    format!("{lhs} -> '{rhs}'")
+                                })
                                 .collect::<Vec<_>>()
                                 .join("\n")
                         })
                         .unwrap_or("".into());
-                    (T2GrammarResult::Produced(has_produced), chain)
+                    // let cnf = g.to_cnf_vladik().to_string();
+                    let cnf = g.to_cnf().to_string();
+                    (T2GrammarResult::Produced(has_produced), chain, cnf)
                 }
-                Err(e) => (T2GrammarResult::Error(e), "".into()),
+                Err(e) => (T2GrammarResult::Error(e), "".into(), "".into()),
             };
             model.t2grammar_state.result = result;
-            model.t2grammar_state.productions.select_all();
-            model.t2grammar_state.productions.cut();
-            model.t2grammar_state.productions.insert_str(transitions);
-            model
-                .t2grammar_state
-                .productions
-                .move_cursor(CursorMove::Top);
-            model
-                .t2grammar_state
-                .productions
-                .move_cursor(CursorMove::End);
+            set_textarea(&mut model.t2grammar_state.productions, transitions);
+            set_textarea(&mut model.t2grammar_state.cnf, cnf);
         }
     }
 }

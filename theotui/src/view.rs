@@ -629,7 +629,7 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
             [
                 Constraint::Min(7),    // definition
                 Constraint::Length(3), // input word
-                Constraint::Min(3),    // transitions
+                Constraint::Min(3),    // productions
                 Constraint::Length(3), // result
             ]
             .as_ref(),
@@ -648,6 +648,10 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
     model
         .t3grammar_state
         .input_word_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .t3grammar_state
+        .productions
         .set_cursor_line_style(default_style);
     model
         .t3grammar_state
@@ -791,7 +795,8 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
             [
                 Constraint::Min(7),    // definition
                 Constraint::Length(3), // input word
-                Constraint::Min(3),    // transitions
+                Constraint::Min(3),    // productions
+                Constraint::Min(3),    // chomsky normal form
                 Constraint::Length(3), // result
             ]
             .as_ref(),
@@ -801,7 +806,8 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
     let definition_rect = sub_vert_split[0];
     let word_input_rect = sub_vert_split[1];
     let productions_rect = sub_vert_split[2];
-    let result_rect = sub_vert_split[3];
+    let cnf_rect = sub_vert_split[3];
+    let result_rect = sub_vert_split[4];
 
     model
         .t2grammar_state
@@ -811,6 +817,15 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .t2grammar_state
         .input_word_textarea
         .set_cursor_line_style(default_style);
+    model
+        .t2grammar_state
+        .productions
+        .set_cursor_line_style(default_style);
+    model
+        .t2grammar_state
+        .cnf
+        .set_cursor_line_style(default_style);
+
     model
         .t2grammar_state
         .productions
@@ -850,6 +865,7 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .set_block(word_input_block);
     frame.render_widget(&model.t2grammar_state.input_word_textarea, word_input_rect);
 
+    // render productions
     let productions_block = Block::default().borders(Borders::ALL).style(default_style);
     let productions_block = {
         let has_focus = model.focus == Focus::TopicContent
@@ -870,6 +886,23 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .productions
         .set_block(productions_block);
     frame.render_widget(&model.t2grammar_state.productions, productions_rect);
+
+    // render cnf
+    let cnf_block = Block::default().borders(Borders::ALL).style(default_style);
+    let cnf_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t2grammar_state.focus == T2GrammarFocus::Cnf;
+        let mut title = " Chomsky NF of G".to_string();
+        if has_focus {
+            title.push_str("* ");
+            cnf_block.title(title).set_style(default_style.bold())
+        } else {
+            title.push(' ');
+            cnf_block.title(title)
+        }
+    };
+    model.t2grammar_state.cnf.set_block(cnf_block);
+    frame.render_widget(&model.t2grammar_state.cnf, cnf_rect);
 
     // render result
     let result_paragraph = {
