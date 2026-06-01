@@ -11,7 +11,7 @@ use std::{collections::HashMap, ops::Deref};
 use theoinf::{
     dfa::{self, RunningDfa},
     propositional_logic::{Assignment, run},
-    type2grammar::{self, Type2Grammar},
+    type2grammar::{self},
     type3grammar,
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
