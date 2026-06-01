@@ -633,14 +633,14 @@ impl Type2Grammar {
                 updated_paths.insert(updated_path);
             }
             paths = updated_paths;
-        }
 
-        graph.1.iter().for_each(|(lhs, rhs)| {
-            if paths.iter().any(|path| &path[0] == rhs) {
-                let edge: Edge = (lhs.to_string(), rhs.to_string());
-                stack.push(edge);
-            }
-        });
+            graph.1.iter().for_each(|(lhs, rhs)| {
+                if paths.iter().any(|path| &path[0] == rhs) {
+                    let edge: Edge = (lhs.to_string(), rhs.to_string());
+                    stack.push(edge);
+                }
+            });
+        }
 
         paths
     }
@@ -1561,6 +1561,20 @@ mod tests {
         let cycles = Type2Grammar::find_cycles(&graph);
         assert_eq!(0, cycles.len());
         assert_eq!(1, g.productions().len());
+    }
+
+    #[test]
+    fn unit_chain_removal_works() {
+        let s = "
+    V = { S, A, B, C }
+    Sigma = { 'a' }
+    P = { S -> 'A', A -> 'B', B -> 'C', C -> 'a' }
+    S = S
+    ";
+        let g = parser::parse_t2grammar_definition(s).unwrap();
+        let cnf = g.to_cnf();
+        assert_cnf(&cnf);
+        assert!(cnf.try_find_productions("a").is_some());
     }
 
     #[test]
