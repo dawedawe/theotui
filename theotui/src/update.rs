@@ -11,7 +11,8 @@ use std::{collections::HashMap, ops::Deref};
 use theoinf::{
     dfa::{self, RunningDfa},
     propositional_logic::{Assignment, run},
-    type2grammar, type3grammar,
+    type2grammar::{self, Type2Grammar},
+    type3grammar,
 };
 use tui_input::{Input, backend::crossterm::EventHandler};
 
@@ -492,7 +493,6 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                                 .join("\n")
                         })
                         .unwrap_or("".into());
-                    // let cnf = g.to_cnf_vladik().to_string();
                     let cnf = g.to_cnf().to_string();
                     (T2GrammarResult::Produced(has_produced), chain, cnf)
                 }
