@@ -12,6 +12,7 @@ use ratatui::{
         ScrollbarState, Table,
     },
 };
+use ratatui_textarea::WrapMode;
 use strum::IntoEnumIterator;
 use tui_input::Input;
 
@@ -491,7 +492,15 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .set_cursor_line_style(default_style);
     model
         .dfa_state
+        .definition_textarea
+        .set_wrap_mode(WrapMode::Word);
+    model
+        .dfa_state
         .input_word_textarea
+        .set_cursor_line_style(default_style);
+    model
+        .dfa_state
+        .transitions
         .set_cursor_line_style(default_style);
     model
         .dfa_state
@@ -645,6 +654,10 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .t3grammar_state
         .definition_textarea
         .set_cursor_line_style(default_style);
+    model
+        .t3grammar_state
+        .definition_textarea
+        .set_wrap_mode(WrapMode::Word);
     model
         .t3grammar_state
         .input_word_textarea
@@ -815,6 +828,10 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .set_cursor_line_style(default_style);
     model
         .t2grammar_state
+        .definition_textarea
+        .set_wrap_mode(WrapMode::Word);
+    model
+        .t2grammar_state
         .input_word_textarea
         .set_cursor_line_style(default_style);
     model
@@ -825,7 +842,7 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .t2grammar_state
         .cnf
         .set_cursor_line_style(default_style);
-
+    model.t2grammar_state.cnf.set_wrap_mode(WrapMode::Word);
     model
         .t2grammar_state
         .productions
