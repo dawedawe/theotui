@@ -114,7 +114,7 @@ P = { S -> '(S)', S -> '()', S -> '' }
 S = S"
 ```
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/d60ae51253570746d3e64ed4c8d3a2a394880946/theotui/images/type2grammar.png" alt="type-2 grammar">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/151fd2ca1c731031cd1f2d9ee28b5563bdaed997/theotui/images/type2grammar.png" alt="type-2 grammar">
 
 ## Usage
 

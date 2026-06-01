@@ -66,7 +66,7 @@ A `Type-3 Grammar` is defined with the usual 4 parts:
 - `V`, the set of non-terminals
 - `Sigma`, the set of terminals
 - `P`, the set of production rules
-- `S`, the start non-terminal                
+- `S`, the start non-terminal
 
 A single right-regular production rule has one of the following three forms:  
 
@@ -100,7 +100,7 @@ A `Type-2 Grammar` is defined with the usual 4 parts:
 - `V`, the set of non-terminals
 - `Sigma`, the set of terminals
 - `P`, the set of production rules
-- `S`, the start non-terminal                
+- `S`, the start non-terminal
 
 A production rule has one of the following forms:  
 
@@ -118,7 +118,7 @@ P = { S -> '(S)', S -> '()', S -> '' }
 S = S"
 ```
 
-<img src="https://codeberg.org/dawe/theotui/raw/commit/d60ae51253570746d3e64ed4c8d3a2a394880946/theotui/images/type2grammar.png" alt="type-2 grammar">
+<img src="https://codeberg.org/dawe/theotui/raw/commit/151fd2ca1c731031cd1f2d9ee28b5563bdaed997/theotui/images/type2grammar.png" alt="type-2 grammar">
 
 ## Usage
 
