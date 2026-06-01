@@ -1,3 +1,20 @@
+## [0.4.3] - 2026-06-01
+
+### 🚀 Features
+
+- *(t2grammar)* Conversion to chomsky normal form
+- *(tui)* Support wrapping in some textareas by updating ratatui-textarea
+
+### 📚 Documentation
+
+- Update screenshot of Type-2 Grammar
+- Update README.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Cleanup
+- Bump crate versions
+
 ## [0.4.2] - 2026-05-22
 
 ### 🚀 Features
