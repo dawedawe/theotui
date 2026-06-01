@@ -1,3 +1,9 @@
+## [0.4.4] - 2026-06-02
+
+### 🐛 Bug Fixes
+
+- *(t2grammar)* Fix handling of unit-rule chains in CNF conversion
+
 ## [0.4.3] - 2026-06-01
 
 ### 🚀 Features
