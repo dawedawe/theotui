@@ -621,28 +621,37 @@ impl Type2Grammar {
             .collect();
 
         while let Some(edge) = stack.pop() {
-            let mut updated_paths: HashSet<Path> = HashSet::new();
+            let mut extended_paths: HashSet<Path> = HashSet::new();
             for path in &paths {
-                let updated_path = if edge.1 == path[0] {
+                if edge.1 == path[0] {
                     let mut new_path = path.clone();
                     new_path.insert(0, edge.0.clone());
-                    new_path
-                } else {
-                    path.clone()
-                };
-                updated_paths.insert(updated_path);
-            }
-            paths = updated_paths;
-
-            graph.1.iter().for_each(|(lhs, rhs)| {
-                if paths.iter().any(|path| &path[0] == rhs) {
-                    let edge: Edge = (lhs.to_string(), rhs.to_string());
-                    stack.push(edge);
+                    extended_paths.insert(new_path);
                 }
-            });
+            }
+
+            let old_len = paths.len();
+            paths.extend(extended_paths);
+            if paths.len() > old_len {
+                let starts: HashSet<_> = paths.iter().map(|p| &p[0]).collect();
+                graph.1.iter().for_each(|(lhs, rhs)| {
+                    if starts.contains(rhs) {
+                        stack.push((lhs.clone(), rhs.clone()));
+                    }
+                });
+            }
         }
 
-        paths
+        let subpaths_to_remove: HashSet<Path> = paths
+            .iter()
+            .filter(|path| {
+                paths
+                    .iter()
+                    .any(|p| p.len() > path.len() && p.ends_with(path))
+            })
+            .cloned()
+            .collect();
+        paths.difference(&subpaths_to_remove).cloned().collect()
     }
 
     /// Remove unit production chains and replaces them with appropriate rules.
@@ -1575,6 +1584,24 @@ mod tests {
         let cnf = g.to_cnf();
         assert_cnf(&cnf);
         assert!(cnf.try_find_productions("a").is_some());
+    }
+
+    #[test]
+    fn cnf_handles_branching_unit_paths() {
+        let s = "
+    V = { A, B, X, Y }
+    Sigma = { 'a' }
+    P = { A -> 'X', B -> 'X', X -> 'Y', Y -> 'a' }
+    S = A
+    ";
+        let g = parser::parse_t2grammar_definition(s).unwrap();
+        let cnf = g.to_cnf();
+        assert_cnf(&cnf);
+        assert!(cnf.try_find_productions("a").is_some());
+        assert!(
+            cnf.productions().contains(&("B".into(), vec!["a".into()])),
+            "B -> 'a' should exist after CNF because it's not reachable from start and we don't clean these up yet. "
+        );
     }
 
     #[test]
