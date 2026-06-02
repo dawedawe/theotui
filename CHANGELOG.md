@@ -1,3 +1,13 @@
+## [0.4.5] - 2026-06-02
+
+### 🐛 Bug Fixes
+
+- *(t2grammar)* Fix handling of branching unit-rule chains in CNF conversion
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump crate versions
+
 ## [0.4.4] - 2026-06-02
 
 ### 🐛 Bug Fixes
