@@ -532,8 +532,7 @@ impl Type2Grammar {
 
     /// Checks if a production is a unit rule A -> B.
     fn is_unit_rule(&self, p: &ProductionRule) -> bool {
-        // p.1.len() == 1 && self.nonterminals().contains(&p.1[0]) // TODO
-        p.1.len() == 1 && p.1 != vec![EPSI] && !self.sigma().contains(&p.1[0])
+        p.1.len() == 1 && self.nonterminals().contains(&p.1[0])
     }
 
     /// Creates the graph (V, E) of unit rules in the grammar.
@@ -654,7 +653,7 @@ impl Type2Grammar {
         paths.difference(&subpaths_to_remove).cloned().collect()
     }
 
-    /// Remove unit production chains and replaces them with appropriate rules.
+    /// Remove unit production chains and replaces them with appropriate rules by inlining.
     fn remove_unit_productions(&self) -> Self {
         let mut c = self.clone();
         let graph = c.graph_of_unit_rules();
@@ -691,12 +690,7 @@ impl Type2Grammar {
         }
 
         // remove all unit rules
-        let non_unit_prods = c
-            .productions
-            .into_iter()
-            .filter(|p| !self.is_unit_rule(p))
-            .collect();
-        c.productions = non_unit_prods;
+        c.productions.retain(|p| !self.is_unit_rule(p));
 
         c
     }
@@ -743,14 +737,19 @@ impl Type2Grammar {
                 new_prods.insert(new_rule);
             }
             c.productions = new_prods;
-
-            // remove A_2 .. A_n from Nonterminals
-            for a in a_i {
-                c.nonterminals.remove(a);
-            }
         }
 
-        c.remove_unit_productions()
+        let mut c = c.remove_unit_productions();
+
+        // remove all superfluous nonterminals
+        c.nonterminals.retain(|nt| {
+            nt == &c.start
+                || c.productions
+                    .iter()
+                    .any(|(lhs, rhs)| lhs == nt || rhs.contains(nt))
+        });
+
+        c
     }
 
     /// Converts a [Type2grammar] to it's Chomsky normal form
