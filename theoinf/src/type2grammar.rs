@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::Display,
+    sync::LazyLock,
 };
 
 pub type Terminal = String;
@@ -9,7 +10,7 @@ pub type Rhs = Vec<String>;
 pub type ProductionRule = (NonTerminal, Rhs);
 
 /// The empty word epsilon
-const EPSI: String = String::new();
+static EPSI: LazyLock<Rhs> = LazyLock::new(|| vec!["".to_string()]);
 
 pub mod parser {
     use std::collections::HashSet;
@@ -104,7 +105,7 @@ pub mod parser {
                 (
                     nt,
                     if rhs.is_empty() {
-                        vec![EPSI]
+                        EPSI.clone()
                     } else {
                         rhs.chars().map(|c| c.to_string()).collect()
                     },
@@ -451,7 +452,7 @@ impl Type2Grammar {
                 .filter(|(lhs, _rhs)| lhs == nt)
                 .collect();
 
-            let produces_eps = rules_of_nt.iter().any(|(_, r)| r == &vec![EPSI]);
+            let produces_eps = rules_of_nt.iter().any(|(_, r)| r == &*EPSI);
             if produces_eps {
                 true
             } else {
@@ -502,7 +503,7 @@ impl Type2Grammar {
                     let new_rule: ProductionRule = (r.0.clone(), new_rhs);
                     c.productions.insert(new_rule);
                 } else {
-                    let new_rule: ProductionRule = (r.0.clone(), vec![EPSI]);
+                    let new_rule: ProductionRule = (r.0.clone(), EPSI.clone());
 
                     if &r.0 == self.start() {
                         c.productions.insert(new_rule);
@@ -516,7 +517,7 @@ impl Type2Grammar {
         let eps_rules: Vec<_> = c
             .productions()
             .iter()
-            .filter(|(lhs, rhs)| lhs != c.start() && rhs == &vec![EPSI])
+            .filter(|(lhs, rhs)| lhs != c.start() && rhs == &*EPSI)
             .cloned()
             .collect();
         eps_rules.iter().for_each(|r| {
@@ -527,7 +528,7 @@ impl Type2Grammar {
 
     /// Checks if a production creates epsilon.
     fn is_epsilon_rule(p: &ProductionRule) -> bool {
-        p.1 == vec![EPSI]
+        p.1 == *EPSI
     }
 
     /// Checks if a production is a unit rule A -> B.
@@ -860,7 +861,7 @@ mod tests {
 
     fn str_to_rhs(s: &str) -> Rhs {
         if s.is_empty() {
-            vec![EPSI]
+            EPSI.clone()
         } else {
             s.chars().map(|c| c.into()).collect()
         }
@@ -1388,7 +1389,7 @@ mod tests {
         assert_eq!("S_0", cnf.start());
         assert_eq!(
             &HashSet::from_iter(vec![
-                ("S_0".into(), vec![EPSI]),
+                ("S_0".into(), EPSI.clone()),
                 ("S_0".into(), vec!["B".into(), "A_1".into()]),
                 ("A".into(), vec!["B".into(), "A_1".into()]),
                 ("A_1".into(), vec!["C".into(), "A_2".into()]),
@@ -1478,7 +1479,7 @@ mod tests {
                 ("C".into(), vec!["b".into()]),
                 ("C".into(), vec!["c".into()]),
                 ("A".into(), vec!["a".into()]),
-                ("A".into(), vec![EPSI]),
+                ("A".into(), EPSI.clone()),
             ]),
             "S_0".into(),
         );
@@ -1625,6 +1626,6 @@ mod tests {
         assert!(cnf.try_find_productions("aabb").is_some());
         let eps_prods = cnf.try_find_productions("");
         assert!(eps_prods.is_some());
-        assert_eq!(vec![("S_0".into(), vec![EPSI])], eps_prods.unwrap());
+        assert_eq!(vec![("S_0".into(), EPSI.clone())], eps_prods.unwrap());
     }
 }
