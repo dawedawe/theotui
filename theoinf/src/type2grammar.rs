@@ -262,33 +262,29 @@ impl Type2Grammar {
             return Err("start must be an element of V.".into());
         }
 
-        let (mut unknown_prod_nonterms, mut unknown_prod_terms): (Vec<String>, Vec<String>) =
+        let (mut unknown_prod_nonterms, mut unknown_prod_terms): (Vec<&str>, Vec<&str>) =
             productions.iter().fold(
                 (vec![], vec![]),
-                |(mut unknown_nonterms, mut unknown_terms): (Vec<String>, Vec<_>), (nt, rhs)| {
+                |(mut unknown_nonterms, mut unknown_terms): (Vec<_>, Vec<_>), (nt, rhs)| {
                     if !nonterminals.contains(nt) {
-                        unknown_nonterms.push(nt.to_string());
+                        unknown_nonterms.push(nt);
                     }
 
-                    let terms: Vec<_> = rhs
-                        .iter()
+                    rhs.iter()
                         .filter(|s| !s.is_empty() && s.chars().all(|c| !c.is_uppercase()))
-                        .collect();
-                    terms.iter().for_each(|c| {
-                        if !sigma.contains(&c.to_string()) {
-                            unknown_terms.push(c.to_string());
-                        }
-                    });
+                        .for_each(|c| {
+                            if !sigma.contains(c) {
+                                unknown_terms.push(c);
+                            }
+                        });
 
-                    let non_terms: Vec<_> = rhs
-                        .iter()
+                    rhs.iter()
                         .filter(|s| s.starts_with(|c: char| c.is_uppercase()))
-                        .collect();
-                    non_terms.iter().for_each(|c| {
-                        if !nonterminals.contains(&c.to_string()) {
-                            unknown_nonterms.push(c.to_string());
-                        }
-                    });
+                        .for_each(|c| {
+                            if !nonterminals.contains(c) {
+                                unknown_nonterms.push(c);
+                            }
+                        });
                     (unknown_nonterms, unknown_terms)
                 },
             );
@@ -448,8 +444,7 @@ impl Type2Grammar {
         ) -> bool {
             let rules_of_nt: Vec<_> = productions
                 .iter()
-                .filter(|p| !acc.contains(p))
-                .filter(|(lhs, _rhs)| lhs == nt)
+                .filter(|p| !acc.contains(p) && &p.0 == nt)
                 .collect();
 
             let produces_eps = rules_of_nt.iter().any(|(_, r)| r == &*EPSI);
@@ -538,16 +533,16 @@ impl Type2Grammar {
 
     /// Creates the graph (V, E) of unit rules in the grammar.
     fn graph_of_unit_rules(&self) -> Graph {
-        let mut unit_rules: HashSet<(NonTerminal, NonTerminal)> = HashSet::new();
+        let vertices = self.nonterminals.clone();
+        let mut edges: HashSet<Edge> = HashSet::new();
 
         for p in self.productions() {
             if self.is_unit_rule(p) {
-                unit_rules.insert((p.0.clone(), p.1[0].clone()));
+                edges.insert((p.0.clone(), p.1[0].clone()));
             }
         }
 
-        let graph: Graph = (self.nonterminals.clone(), unit_rules);
-        graph
+        (vertices, edges)
     }
 
     /// Finds cycles in the unit graph of the grammar that start with the given [NonTerminal].
@@ -755,11 +750,11 @@ impl Type2Grammar {
 
     /// Converts a [Type2grammar] to it's Chomsky normal form
     pub fn to_cnf(&self) -> Self {
-        let g = self.cnf_start();
-        let g = g.cnf_term();
-        let g = g.cnf_bin();
-        let g = g.cnf_del_epsilon();
-        g.cnf_del_unit_rules()
+        self.cnf_start()
+            .cnf_term()
+            .cnf_bin()
+            .cnf_del_epsilon()
+            .cnf_del_unit_rules()
     }
 
     /// Finds all possible [ProductionRule]s for the given [NonTerminal].
