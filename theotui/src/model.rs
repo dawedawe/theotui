@@ -2,12 +2,6 @@ use ratatui::widgets::{ScrollbarState, TableState};
 use ratatui_textarea::TextArea;
 use strum::{Display, EnumCount, EnumIter, FromRepr};
 
-#[derive(Debug, Default, PartialEq)]
-pub(crate) struct InputState {
-    pub(crate) value: String,
-    pub(crate) cursor: usize,
-}
-
 #[derive(Debug, Default, Clone, Copy, Display, FromRepr, EnumIter, EnumCount)]
 pub(crate) enum SelectedTopic {
     #[default]
@@ -53,8 +47,8 @@ pub(crate) enum PropLogicResultFilter {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct PropositionalLogicModel {
-    pub(crate) formula_input_state: InputState,
+pub(crate) struct PropositionalLogicModel<'a> {
+    pub(crate) formula_textarea: TextArea<'a>,
     pub(crate) result: PropLogicResult,
     pub(crate) result_filter: Option<PropLogicResultFilter>,
     pub(crate) truth_table_state: TableState,
@@ -208,7 +202,7 @@ pub(crate) struct Model<'a> {
     pub(crate) running: bool,
     pub(crate) selected_topic: SelectedTopic,
     pub(crate) focus: Focus,
-    pub(crate) proplogic_state: PropositionalLogicModel,
+    pub(crate) proplogic_state: PropositionalLogicModel<'a>,
     pub(crate) settheory_state: SetTheoryModel<'a>,
     pub(crate) dfa_state: DfaModel<'a>,
     pub(crate) t3grammar_state: T3GrammarModel<'a>,

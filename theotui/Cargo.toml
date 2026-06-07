@@ -10,6 +10,5 @@ description = "A TUI to explore theoretical computer science topics."
 theoinf = { path = "../theoinf", version = "0.4.3"}
 ratatui = "0.30.1"
 color-eyre = "0.6.5"
-tui-input = "0.15.0"
 strum = "0.28.0"
 ratatui-textarea = "0.9.1"

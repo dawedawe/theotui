@@ -14,7 +14,6 @@ use ratatui::{
 };
 use ratatui_textarea::WrapMode;
 use strum::IntoEnumIterator;
-use tui_input::Input;
 
 fn default_style() -> Style {
     Style::default().fg(Color::Green)
@@ -215,33 +214,25 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
     let cnf_rect = sub_vert_split[3];
     let dnf_rect = sub_vert_split[4];
 
-    // render formula input
-    let formula_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
-        .with_cursor(model.proplogic_state.formula_input_state.cursor);
-    let formula_width = formula_rect.width.max(3) - 3; // keep 2 for borders and 1 for cursor
-    let formula_scroll = formula_input.visual_scroll(formula_width as usize);
-    let formula_block = Block::default().borders(Borders::ALL);
-    let formula_block = if model.focus == Focus::TopicContent {
-        formula_block
+    // render formula input textarea
+    model
+        .proplogic_state
+        .formula_textarea
+        .set_cursor_line_style(default_style);
+
+    let formula_input_block = Block::default().borders(Borders::ALL).style(default_style);
+    let formula_input_block = if model.focus == Focus::TopicContent {
+        formula_input_block
             .title(" Formula φ* ")
             .title_style(default_style.bold())
     } else {
-        formula_block.title(" Formula φ ")
+        formula_input_block.title(" Formula φ ")
     };
-    let formula_paragraph = Paragraph::new(formula_input.value())
-        .style(default_style)
-        .scroll((0, formula_scroll as u16))
-        .block(formula_block);
-    frame.render_widget(formula_paragraph, formula_rect);
-
-    frame.set_cursor_position((
-        // Put cursor past the end of the input text
-        formula_rect.x
-            + ((formula_input.visual_cursor()).max(formula_scroll) - formula_scroll) as u16
-            + 1,
-        // Move one line down, from the border to the input line
-        formula_rect.y + 1,
-    ));
+    model
+        .proplogic_state
+        .formula_textarea
+        .set_block(formula_input_block);
+    frame.render_widget(&model.proplogic_state.formula_textarea, formula_rect);
 
     // render eval result
     match &model.proplogic_state.result {

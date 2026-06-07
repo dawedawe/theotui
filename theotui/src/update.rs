@@ -14,7 +14,6 @@ use theoinf::{
     type2grammar::{self},
     type3grammar,
 };
-use tui_input::{Input, backend::crossterm::EventHandler};
 
 pub(crate) enum PropLogicMsg {
     Eval,
@@ -105,11 +104,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
             Some(Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows))
         }
         (SelectedTopic::PropositionalLogic, _) if model.focus == Focus::TopicContent => {
-            let mut tmp_input = Input::new(model.proplogic_state.formula_input_state.value.clone())
-                .with_cursor(model.proplogic_state.formula_input_state.cursor);
-            tmp_input.handle_event(&Event::Key(key));
-            model.proplogic_state.formula_input_state.cursor = tmp_input.cursor();
-            model.proplogic_state.formula_input_state.value = tmp_input.value().into();
+            model.proplogic_state.formula_textarea.input(key);
             None
         }
         (SelectedTopic::SetTheory, _) if model.focus == Focus::TopicContent => {
@@ -337,9 +332,9 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
         }
         Msg::PropLogicMsg(PropLogicMsg::Eval) => {
             model.proplogic_state.result_filter = None;
-            let table = theoinf::propositional_logic::truth_table(
-                model.proplogic_state.formula_input_state.value.as_str(),
-            );
+            let formula = model.proplogic_state.formula_textarea.lines();
+            let formula = formula.first().map(|w| w.deref()).unwrap_or("");
+            let table = theoinf::propositional_logic::truth_table(formula);
             match table {
                 Ok(table) if !table.rows.is_empty() => {
                     model.proplogic_state.truth_table_state.select(Some(0));
@@ -349,10 +344,7 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 }
                 Ok(_) => {
                     let assignment: Assignment = HashMap::new();
-                    let r = run(
-                        model.proplogic_state.formula_input_state.value.as_str(),
-                        &assignment,
-                    );
+                    let r = run(formula, &assignment);
                     model.proplogic_state.result = match r {
                         Ok(r) => PropLogicResult::Literal(r),
                         Err(e) => PropLogicResult::Error(e),
