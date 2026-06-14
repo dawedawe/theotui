@@ -1,3 +1,23 @@
+## [0.4.6] - 2026-06-14
+
+### 🚀 Features
+
+- *(tui)* Remove tui-input dependency and use textarea for proplogic formula input instead
+- *(t2grammar)* Implement the CYK algorithm
+
+### 🚜 Refactor
+
+- *(t2grammar)* Use a LazyLock<Rhs> for EPSI
+
+### 📚 Documentation
+
+- Update screenshot of Type-2 Grammar
+- Update README.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Update ratatui from 0.30.0 to 0.30.1
+
 ## [0.4.5] - 2026-06-02
 
 ### 🐛 Bug Fixes
