@@ -178,6 +178,12 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
                     }
                     None
                 }
+                crate::model::T2GrammarFocus::CykProductions => {
+                    if is_nav_keycode(key) {
+                        model.t2grammar_state.cyk_productions.input(key);
+                    }
+                    None
+                }
                 crate::model::T2GrammarFocus::Cnf => {
                     if is_nav_keycode(key) {
                         model.t2grammar_state.cnf.input(key);
@@ -196,6 +202,17 @@ fn set_textarea(productions: &mut TextArea, content: String) {
     productions.insert_str(content);
     productions.move_cursor(CursorMove::Top);
     productions.move_cursor(CursorMove::End);
+}
+
+fn production_chain_to_string(productions: Vec<(String, Vec<String>)>) -> String {
+    productions
+        .iter()
+        .map(|(lhs, rhs)| {
+            let rhs = rhs.join("");
+            format!("{lhs} -> '{rhs}'")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub(crate) fn update(model: &mut Model, msg: Msg) {
@@ -254,6 +271,9 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                         model.t2grammar_state.focus = T2GrammarFocus::Productions
                     }
                     T2GrammarFocus::Productions => {
+                        model.t2grammar_state.focus = T2GrammarFocus::CykProductions
+                    }
+                    T2GrammarFocus::CykProductions => {
                         model.t2grammar_state.focus = T2GrammarFocus::Cnf
                     }
                     T2GrammarFocus::Cnf => model.focus = Focus::TopicList,
@@ -308,8 +328,11 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                     T2GrammarFocus::Productions => {
                         model.t2grammar_state.focus = T2GrammarFocus::WordInput
                     }
-                    T2GrammarFocus::Cnf => {
+                    T2GrammarFocus::CykProductions => {
                         model.t2grammar_state.focus = T2GrammarFocus::Productions
+                    }
+                    T2GrammarFocus::Cnf => {
+                        model.t2grammar_state.focus = T2GrammarFocus::CykProductions
                     }
                 },
             },
@@ -467,31 +490,33 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             let def = model.t2grammar_state.definition_textarea.lines().join("\n");
             let g = type2grammar::parser::parse_t2grammar_definition(def.as_str());
 
-            let (result, transitions, cnf) = match g {
+            let (result, transitions, cyk_transitions, cnf) = match g {
                 Ok(g) => {
                     let word = model.t2grammar_state.input_word_textarea.lines();
                     let word = word.first().map(|w| w.deref()).unwrap_or("");
                     let productions = g.try_find_productions(word);
                     let has_produced = productions.is_some();
                     let chain = productions
-                        .map(|chain: Vec<(String, Vec<String>)>| {
-                            chain
-                                .iter()
-                                .map(|(lhs, rhs)| {
-                                    let rhs = rhs.join("");
-                                    format!("{lhs} -> '{rhs}'")
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        })
+                        .map(|chain: Vec<(String, Vec<String>)>| production_chain_to_string(chain))
                         .unwrap_or("".into());
-                    let cnf = g.to_cnf().to_string();
-                    (T2GrammarResult::Produced(has_produced), chain, cnf)
+                    let cnf = g.to_cnf();
+                    let cyk_productions = cnf.cyk(word);
+                    let cyk_chain = cyk_productions
+                        .map(|chain: Vec<(String, Vec<String>)>| production_chain_to_string(chain))
+                        .unwrap_or("".into());
+                    let cnf = cnf.to_string();
+                    (
+                        T2GrammarResult::Produced(has_produced),
+                        chain,
+                        cyk_chain,
+                        cnf,
+                    )
                 }
-                Err(e) => (T2GrammarResult::Error(e), "".into(), "".into()),
+                Err(e) => (T2GrammarResult::Error(e), "".into(), "".into(), "".into()),
             };
             model.t2grammar_state.result = result;
             set_textarea(&mut model.t2grammar_state.productions, transitions);
+            set_textarea(&mut model.t2grammar_state.cyk_productions, cyk_transitions);
             set_textarea(&mut model.t2grammar_state.cnf, cnf);
         }
     }

@@ -844,15 +844,208 @@ impl Type2Grammar {
 
         found
     }
+
+    fn is_cnf(&self) -> bool {
+        self.productions().iter().all(|(lhs, rhs)| {
+            if rhs.len() == 1 {
+                if rhs == &*EPSI {
+                    lhs == self.start()
+                } else {
+                    self.sigma().contains(&rhs[0])
+                }
+            } else if rhs.len() == 2 {
+                self.nonterminals().contains(&rhs[0]) && self.nonterminals().contains(&rhs[1])
+            } else {
+                false
+            }
+        })
+    }
+
+    /// The CYK algorithm to find a production chain that produces the given word.
+    pub fn cyk(&self, word: &str) -> Option<Vec<ProductionRule>> {
+        let g = if self.is_cnf() { self } else { &self.to_cnf() };
+        let n = word.len().max(1); // epsilon needs a cell
+        let mut productions: Vec<ProductionRule> = g.productions().iter().cloned().collect();
+        productions.sort();
+        let mut nonterms: Vec<NonTerminal> = g
+            .nonterminals()
+            .difference(&HashSet::from_iter(vec![g.start().clone()]))
+            .cloned()
+            .collect();
+        nonterms.sort();
+        nonterms.insert(0, g.start().clone());
+
+        let r = nonterms.len();
+        let p_3: Vec<bool> = Vec::from_iter(std::iter::repeat_n(false, r)); // [n,n,r] // last index
+        let p_2: Vec<Vec<bool>> = Vec::from_iter(std::iter::repeat_n(p_3, n)); // middle index
+        let mut bigp: Vec<Vec<Vec<bool>>> = Vec::from_iter(std::iter::repeat_n(p_2, n)); // first index
+
+        for s in 1..=n {
+            for r in productions.iter() {
+                if r.1.len() == 1 {
+                    // first index is len 1 of substring/span
+                    // second index is index in word
+                    // third index is nonterm
+                    let s_idx = s - 1;
+                    let v = nonterms.iter().position(|nt| *nt == r.0).unwrap();
+
+                    let s_idx_val: &Rhs = if word.is_empty() {
+                        &EPSI
+                    } else {
+                        &vec![word[s_idx..=s_idx].to_string()]
+                    };
+                    // nonterm v could already have been processed, so OR it
+                    bigp[0][s_idx][v] = bigp[0][s_idx][v] || s_idx_val == &r.1;
+                }
+            }
+        }
+
+        // length of span
+        for l in 2..=n {
+            // start of span
+            for s in 1..=n - l + 1 {
+                // partition of span
+                for p in 1..=l - 1 {
+                    for r in productions.iter() {
+                        if r.1.len() == 2 {
+                            let a = nonterms.iter().position(|nt| *nt == r.0).unwrap();
+                            let b = nonterms
+                                .iter()
+                                .position(|nt| nt == &r.1[0])
+                                .expect("nonterminal for index b not found");
+                            let c = nonterms
+                                .iter()
+                                .position(|nt| nt == &r.1[1])
+                                .expect("nonterminal for index c not found");
+                            let s_idx = s - 1;
+                            let p_idx = p - 1;
+                            let l_idx = l - 1;
+                            if bigp[p_idx][s_idx][b] && bigp[l - p - 1][s + p - 1][c] {
+                                bigp[l_idx][s_idx][a] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let elem_in_lang = bigp[n - 1][0][0];
+        let mut parse_tree: Vec<ProductionRule> = vec![];
+
+        if elem_in_lang && n > 1 {
+            let mut rule_lhs: Vec<(usize, usize, usize, NonTerminal)> = vec![]; // spanlen, spanstart, nonterm
+            let start: (usize, usize, usize, NonTerminal) = (n - 1, 0, 0, g.start().clone());
+            rule_lhs.push(start);
+
+            let bin_rules_with_first_rhs: HashSet<(&NonTerminal, &NonTerminal)> = g
+                .productions()
+                .iter()
+                .filter_map(|(lhs, rhs)| {
+                    if rhs.len() == 2 {
+                        Some((lhs, &rhs[0]))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            let bin_rules: HashSet<(&NonTerminal, &NonTerminal, &NonTerminal)> = g
+                .productions()
+                .iter()
+                .filter_map(|(lhs, rhs)| {
+                    if rhs.len() == 2 {
+                        Some((lhs, &rhs[0], &rhs[1]))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            while let Some((span_len_idx, span_start_idx, _nonterm_idx, lh_nt)) = rule_lhs.pop() {
+                if span_len_idx > 0 {
+                    // vertical search
+                    let rhs1 = (0..=span_len_idx - 1).rev().find_map(|span_len_idx| {
+                        (1..nonterms.len()).find_map(|nonterm_idx| {
+                            if bigp[span_len_idx][span_start_idx][nonterm_idx]
+                                // guard against non-existing rules being made ups
+                                && bin_rules_with_first_rhs.contains(&(&lh_nt, &nonterms[nonterm_idx]))
+                            {
+                                {
+                                    Some((
+                                        span_len_idx,
+                                        span_start_idx,
+                                        nonterm_idx,
+                                        nonterms[nonterm_idx].clone(),
+                                    ))
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                    });
+                    let rhs1 = rhs1.expect("rhs1 expected in cyk");
+                    let rhs1nt = nonterms[rhs1.2].clone();
+
+                    // diagonal search
+                    let mut diag_span_start_idx = span_start_idx;
+                    let rhs2 = (0..=span_len_idx - 1).rev().find_map(|span_len_idx| {
+                        diag_span_start_idx += 1;
+                        (1..nonterms.len()).find_map(|nonterm_idx| {
+                            if bigp[span_len_idx][diag_span_start_idx][nonterm_idx]
+                                // guard against non-existing rules being made up
+                                && bin_rules.contains(&(&lh_nt, &rhs1nt, &nonterms[nonterm_idx]))
+                            {
+                                Some((
+                                    span_len_idx,
+                                    diag_span_start_idx,
+                                    nonterm_idx,
+                                    nonterms[nonterm_idx].clone(),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                    });
+
+                    let rhs2 = rhs2.expect("rhs2 expected in cyk");
+                    rule_lhs.push(rhs2.clone());
+                    rule_lhs.push(rhs1.clone());
+                    let rhs2nt = nonterms[rhs2.2].clone();
+                    let r: ProductionRule = (lh_nt, vec![rhs1nt, rhs2nt]);
+                    parse_tree.push(r);
+                } else {
+                    let target_terminal = &word[span_start_idx..=span_start_idx];
+                    let r = g
+                        .productions()
+                        .iter()
+                        .find(|(lhs, rhs)| {
+                            lhs == &lh_nt && rhs.len() == 1 && rhs[0] == target_terminal
+                        })
+                        .expect("no terminal rule found");
+                    parse_tree.push(r.clone());
+                }
+            }
+
+            Some(parse_tree)
+        } else if elem_in_lang {
+            let target_terminal = if word.is_empty() { "" } else { &word[0..=0] };
+            let r = g
+                .productions()
+                .iter()
+                .find(|(lhs, rhs)| lhs == g.start() && rhs.len() == 1 && rhs[0] == target_terminal)
+                .expect("no terminal rule found");
+            parse_tree.push(r.clone());
+            Some(parse_tree)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use winnow::Parser;
-
-    use crate::type2grammar::parser::Expr;
-
     use super::*;
+    use crate::type2grammar::parser::Expr;
+    use winnow::Parser;
 
     fn str_to_rhs(s: &str) -> Rhs {
         if s.is_empty() {
@@ -863,17 +1056,7 @@ mod tests {
     }
 
     fn assert_cnf(g: &Type2Grammar) {
-        let r = g.productions().iter().all(|(_lhs, rhs)| {
-            if rhs.len() == 1 {
-                rhs[0].is_empty() || g.sigma().contains(&rhs[0])
-            } else if rhs.len() == 2 {
-                g.nonterminals().contains(&rhs[0]) && g.nonterminals().contains(&rhs[1])
-            } else {
-                panic!("bad rhs len")
-            }
-        });
-
-        assert!(r);
+        assert!(Type2Grammar::is_cnf(g));
     }
 
     #[test]
@@ -1104,6 +1287,13 @@ mod tests {
         let cnf = g.to_cnf();
         assert_cnf(&cnf);
         assert!(cnf.try_find_productions("").is_some());
+        let cyk_productions = cnf.cyk("");
+        assert!(cyk_productions.is_some());
+        let cyk_productions = cyk_productions.unwrap();
+        assert_eq!(
+            cyk_productions,
+            vec![(cnf.start().to_string(), EPSI.clone())]
+        );
     }
 
     #[test]
@@ -1122,6 +1312,7 @@ mod tests {
         let cnf = g.to_cnf();
         assert_cnf(&cnf);
         assert!(cnf.try_find_productions("a").is_some());
+        assert!(cnf.cyk("a").is_some());
     }
 
     #[test]
@@ -1146,6 +1337,7 @@ mod tests {
         let cnf = g.to_cnf();
         assert_cnf(&cnf);
         assert!(cnf.try_find_productions("ab").is_some());
+        assert!(cnf.cyk("ab").is_some());
     }
 
     #[test]
@@ -1196,6 +1388,18 @@ mod tests {
         assert!(cnf.try_find_productions("aa").is_some());
         assert!(cnf.try_find_productions("aabbaa").is_some());
         assert!(cnf.try_find_productions("abbbbb").is_some());
+        assert!(cnf.cyk("abbbbb").is_some());
+        let cyk_productions = cnf.cyk("aab");
+        assert!(cyk_productions.is_some());
+        let cyk_productions = cyk_productions.unwrap();
+        let expected = vec![
+            ("S_0".into(), str_to_rhs("AB")),
+            ("A".into(), vec!["N_a".into(), "A".into()]),
+            ("N_a".into(), str_to_rhs("a")),
+            ("A".into(), str_to_rhs("a")),
+            ("B".into(), str_to_rhs("b")),
+        ];
+        assert_eq!(expected, cyk_productions);
     }
 
     #[test]
@@ -1208,13 +1412,16 @@ mod tests {
     ";
         let g = parser::parse_t2grammar_definition(s).unwrap();
         assert!(g.try_find_productions("a*((a-a)/a)").is_some());
+        assert!(g.try_find_productions("a*(((a-a)/a)-((a+a)*a))").is_some());
         assert!(g.try_find_productions("").is_none());
         assert!(g.try_find_productions("a*").is_none());
 
         let cnf = g.to_cnf();
         assert_cnf(&cnf);
         assert!(cnf.try_find_productions("a*((a-a)/a)").is_some());
-        assert!(g.try_find_productions("").is_none());
+        assert!(cnf.cyk("a*((a-a)/a)").is_some());
+        assert!(cnf.cyk("a*(((a-a)/a)-((a+a)*a))").is_some());
+        assert!(cnf.try_find_productions("").is_none());
         assert!(cnf.try_find_productions("a*").is_none());
     }
 
@@ -1622,5 +1829,103 @@ mod tests {
         let eps_prods = cnf.try_find_productions("");
         assert!(eps_prods.is_some());
         assert_eq!(vec![("S_0".into(), EPSI.clone())], eps_prods.unwrap());
+    }
+
+    #[test]
+    fn cyk_works_for_wiki_example() {
+        let r = Type2Grammar::new(
+            HashSet::from([
+                "S".into(),
+                "VP".into(),
+                "PP".into(),
+                "NP".into(),
+                "V".into(),
+                "P".into(),
+                "N".into(),
+                "DET".into(),
+            ]),
+            HashSet::from([
+                "s".into(),
+                "e".into(),
+                "w".into(),
+                "f".into(),
+                "a".into(),
+                "k".into(),
+            ]),
+            HashSet::from([
+                ("S".into(), vec!["NP".into(), "VP".into()]), // S -> NP VP
+                ("VP".into(), vec!["VP".into(), "PP".into()]), // VP -> VP PP
+                ("VP".into(), vec!["V".into(), "NP".into()]), // VP -> V NP
+                ("VP".into(), vec!["e".into()]),              // VP -> eats
+                ("PP".into(), vec!["P".into(), "NP".into()]), // PP -> P NP
+                ("NP".into(), vec!["DET".into(), "N".into()]), // NP -> Det N
+                ("NP".into(), vec!["s".into()]),              // NP -> she
+                ("V".into(), vec!["e".into()]),               // V -> eats
+                ("P".into(), vec!["w".into()]),               // P -> with
+                ("N".into(), vec!["f".into()]),               // N -> fish
+                ("N".into(), vec!["k".into()]),               // N -> knife
+                ("DET".into(), vec!["a".into()]),             // DET -> a
+            ]),
+            "S".into(),
+        );
+        assert!(r.is_ok());
+        let g = r.unwrap();
+        assert_cnf(&g);
+        let parse_tree = g.cyk("seafwak");
+        assert!(parse_tree.is_some());
+        assert_eq!(parse_tree.unwrap().len(), 13);
+    }
+
+    #[test]
+    fn cyk_works() {
+        let s = "
+    V = { Y, T }
+    Sigma = { 'a', 'b'  }
+    P = { Y -> 'TT', T -> 'a' }
+    S = Y
+    ";
+        let r = parser::parse_t2grammar_definition(s);
+        assert!(r.is_ok());
+        let g = r.unwrap();
+        let g = g.to_cnf();
+        assert!(g.cyk("a").is_none());
+        assert!(g.cyk("aa").is_some());
+        assert!(g.cyk("b").is_none());
+        assert!(g.cyk("ab").is_none());
+    }
+
+    #[test]
+    fn cyk_work_for_balanced_parens() {
+        let s = "
+    V = { S }
+    Sigma = { '(', ')' }
+    P = { S -> '(S)', S -> '()' }
+    S = S
+    ";
+        let g = parser::parse_t2grammar_definition(s).unwrap();
+        let cnf = g.to_cnf();
+        assert_cnf(&cnf);
+        assert!(cnf.cyk("()").is_some());
+        assert!(cnf.cyk("(())").is_some());
+        assert!(cnf.cyk("((()))").is_some());
+        assert!(cnf.cyk("(").is_none());
+        assert!(cnf.cyk("x").is_none());
+    }
+
+    #[test]
+    fn cyk_work_for_balanced_parens2() {
+        let s = "
+    V = { S, T, U, A, B, C, D }
+    Sigma = { '(', ')', '[', ']' }
+    P = { S -> 'AB', S -> 'CD', S -> 'AT', S -> 'CU', S -> 'SS', T -> 'SB', U -> 'SD', A -> '(', B -> ')', C -> '[', D -> ']' }
+    S = S
+    ";
+        let g = parser::parse_t2grammar_definition(s).unwrap();
+        let cnf = g.to_cnf();
+        assert_cnf(&cnf);
+        let cyk_productions = cnf.cyk("()[()]");
+        assert!(cyk_productions.is_some());
+        let cyk_productions = cyk_productions.unwrap();
+        assert_eq!(cyk_productions.len(), 11);
     }
 }

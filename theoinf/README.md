@@ -31,5 +31,6 @@ Words can be tested to find all possible production chains for them.
 ## type-2 grammars
 
 A Type-2 grammar can be defined.  
-Words can be tested to find a possible production chain for them.
-
+Words can be tested to find a possible production chain for them.  
+A grammar can be converted to it's Chomsky normal form (CNF).  
+The CYK algorithm for CNF grammars can be used to test words.

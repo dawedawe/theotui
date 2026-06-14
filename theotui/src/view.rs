@@ -799,7 +799,7 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
             [
                 Constraint::Min(7),    // definition
                 Constraint::Length(3), // input word
-                Constraint::Min(3),    // productions
+                Constraint::Min(3),    // productions / cyk productions
                 Constraint::Min(3),    // chomsky normal form
                 Constraint::Length(3), // result
             ]
@@ -809,7 +809,15 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
 
     let definition_rect = sub_vert_split[0];
     let word_input_rect = sub_vert_split[1];
+
     let productions_rect = sub_vert_split[2];
+    let productions_split = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)].as_ref())
+        .split(productions_rect);
+    let productions_rect = productions_split[0];
+    let cyk_productions_rect = productions_split[1];
+
     let cnf_rect = sub_vert_split[3];
     let result_rect = sub_vert_split[4];
 
@@ -831,12 +839,20 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .set_cursor_line_style(default_style);
     model
         .t2grammar_state
+        .cyk_productions
+        .set_cursor_line_style(default_style);
+    model
+        .t2grammar_state
         .cnf
         .set_cursor_line_style(default_style);
     model.t2grammar_state.cnf.set_wrap_mode(WrapMode::Word);
     model
         .t2grammar_state
         .productions
+        .set_line_number_style(default_style);
+    model
+        .t2grammar_state
+        .cyk_productions
         .set_line_number_style(default_style);
 
     // render definition textarea
@@ -894,6 +910,28 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         .productions
         .set_block(productions_block);
     frame.render_widget(&model.t2grammar_state.productions, productions_rect);
+
+    // render cyk productions
+    let cyk_productions_block = Block::default().borders(Borders::ALL).style(default_style);
+    let cyk_productions_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t2grammar_state.focus == T2GrammarFocus::CykProductions;
+        let mut title = " CYK Productions".to_string();
+        if has_focus {
+            title.push_str("* ");
+            cyk_productions_block
+                .title(title)
+                .set_style(default_style.bold())
+        } else {
+            title.push(' ');
+            cyk_productions_block.title(title)
+        }
+    };
+    model
+        .t2grammar_state
+        .cyk_productions
+        .set_block(cyk_productions_block);
+    frame.render_widget(&model.t2grammar_state.cyk_productions, cyk_productions_rect);
 
     // render cnf
     let cnf_block = Block::default().borders(Borders::ALL).style(default_style);

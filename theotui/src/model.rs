@@ -153,6 +153,7 @@ pub(crate) enum T2GrammarFocus {
     Definition,
     WordInput,
     Productions,
+    CykProductions,
     Cnf,
 }
 
@@ -170,6 +171,7 @@ pub(crate) struct T2GrammarModel<'a> {
     pub(crate) input_word_textarea: TextArea<'a>,
     pub(crate) focus: T2GrammarFocus,
     pub(crate) productions: TextArea<'a>,
+    pub(crate) cyk_productions: TextArea<'a>,
     pub(crate) cnf: TextArea<'a>,
     pub(crate) result: T2GrammarResult,
 }
@@ -184,6 +186,7 @@ impl<'a> Default for T2GrammarModel<'a> {
             input_word_textarea: Default::default(),
             focus: Default::default(),
             productions: Default::default(),
+            cyk_productions: Default::default(),
             cnf: Default::default(),
             result: Default::default(),
         }
