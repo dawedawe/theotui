@@ -1404,14 +1404,14 @@ dependencies = [
 
 [[package]]
 name = "theoinf"
-version = "0.4.4"
+version = "0.4.5"
 dependencies = [
  "winnow",
 ]
 
 [[package]]
 name = "theotui"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "color-eyre",
  "ratatui",
