@@ -230,12 +230,11 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     }
 }
 
-fn set_textarea(textarea: &mut TextArea, content: String) {
+fn set_textarea(textarea: &mut TextArea, content: String, cursormoves: Vec<CursorMove>) {
     textarea.select_all();
     textarea.cut();
     textarea.insert_str(content);
-    textarea.move_cursor(CursorMove::Top);
-    textarea.move_cursor(CursorMove::End);
+    cursormoves.iter().for_each(|m| textarea.move_cursor(*m));
 }
 
 fn production_chain_to_string(productions: Vec<(String, Vec<String>)>) -> String {
@@ -454,21 +453,21 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => (PropLogicResult::Error(e), "".into(), "".into(), "".into()),
             };
             model.proplogic_state.result = r;
-            set_textarea(&mut model.proplogic_state.ast_textarea, ast);
-            model
-                .proplogic_state
-                .ast_textarea
-                .move_cursor(CursorMove::Jump(0, 0));
-            set_textarea(&mut model.proplogic_state.cnf_textarea, cnf);
-            model
-                .proplogic_state
-                .cnf_textarea
-                .move_cursor(CursorMove::Jump(0, 0));
-            set_textarea(&mut model.proplogic_state.dnf_textarea, dnf);
-            model
-                .proplogic_state
-                .dnf_textarea
-                .move_cursor(CursorMove::Jump(0, 0));
+            set_textarea(
+                &mut model.proplogic_state.ast_textarea,
+                ast,
+                vec![CursorMove::Jump(0, 0)],
+            );
+            set_textarea(
+                &mut model.proplogic_state.cnf_textarea,
+                cnf,
+                vec![CursorMove::Jump(0, 0)],
+            );
+            set_textarea(
+                &mut model.proplogic_state.dnf_textarea,
+                dnf,
+                vec![CursorMove::Jump(0, 0)],
+            );
         }
         Msg::PropLogicMsg(PropLogicMsg::ScrollUp) => {
             if let Some(i) = match (
@@ -549,11 +548,11 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => (DfaResult::Error(e), "".to_string()),
             };
             model.dfa_state.result = result;
-            model.dfa_state.transitions.select_all();
-            model.dfa_state.transitions.cut();
-            model.dfa_state.transitions.insert_str(transitions);
-            model.dfa_state.transitions.move_cursor(CursorMove::Top);
-            model.dfa_state.transitions.move_cursor(CursorMove::End);
+            set_textarea(
+                &mut model.dfa_state.transitions,
+                transitions,
+                vec![CursorMove::Top, CursorMove::End],
+            );
         }
         Msg::T3GrammarMsg(T3GrammarMsg::Eval) => {
             let def = model.t3grammar_state.definition_textarea.lines().join("\n");
@@ -580,17 +579,11 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => (T3GrammarResult::Error(e), "".into()),
             };
             model.t3grammar_state.result = result;
-            model.t3grammar_state.productions.select_all();
-            model.t3grammar_state.productions.cut();
-            model.t3grammar_state.productions.insert_str(transitions);
-            model
-                .t3grammar_state
-                .productions
-                .move_cursor(CursorMove::Top);
-            model
-                .t3grammar_state
-                .productions
-                .move_cursor(CursorMove::End);
+            set_textarea(
+                &mut model.t3grammar_state.productions,
+                transitions,
+                vec![CursorMove::Top, CursorMove::End],
+            );
         }
         Msg::T2GrammarMsg(T2GrammarMsg::Eval) => {
             let def = model.t2grammar_state.definition_textarea.lines().join("\n");
@@ -621,9 +614,21 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Err(e) => (T2GrammarResult::Error(e), "".into(), "".into(), "".into()),
             };
             model.t2grammar_state.result = result;
-            set_textarea(&mut model.t2grammar_state.productions, transitions);
-            set_textarea(&mut model.t2grammar_state.cyk_productions, cyk_transitions);
-            set_textarea(&mut model.t2grammar_state.cnf, cnf);
+            set_textarea(
+                &mut model.t2grammar_state.productions,
+                transitions,
+                vec![CursorMove::Top, CursorMove::End],
+            );
+            set_textarea(
+                &mut model.t2grammar_state.cyk_productions,
+                cyk_transitions,
+                vec![CursorMove::Top, CursorMove::End],
+            );
+            set_textarea(
+                &mut model.t2grammar_state.cnf,
+                cnf,
+                vec![CursorMove::Top, CursorMove::End],
+            );
         }
     }
 }
