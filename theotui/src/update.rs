@@ -161,7 +161,7 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
                     }
                 }
                 crate::model::DfaFocus::Transitions => {
-                    if key.code == KeyCode::Up || key.code == KeyCode::Down {
+                    if is_nav_keycode(key) {
                         model.dfa_state.transitions.input(key);
                     }
                     None
