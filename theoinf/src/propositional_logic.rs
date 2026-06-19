@@ -72,8 +72,9 @@ impl Expr {
         } else if exprs.len() == 1 {
             exprs[0].clone()
         } else {
-            let left = exprs.iter().next().unwrap().clone();
-            let right = Expr::reduce(&exprs[1..], f);
+            let mid = exprs.len() / 2;
+            let left = Self::reduce(&exprs[..mid], f);
+            let right = Self::reduce(&exprs[mid..], f);
             f(left, right)
         }
     }
@@ -776,5 +777,22 @@ mod tests {
         let terms = min_terms(formula).unwrap();
         assert_eq!(terms.len(), 0);
         assert!(dnf(formula).unwrap().is_none());
+    }
+
+    #[test]
+    fn test_for_regression_of_stack_overflow_in_expr_reduce() {
+        let table = truth_table(
+            "a1 | a2 | a3 | a4 | a5 | a6 | a7 | a8 | a9 | a10 | a11 | a12 | a13 | a14 | a15 ",
+        );
+        assert!(table.is_ok());
+        let (_expr, table) = table.expect("expected ok table");
+        let _cnf = match table.cnf() {
+            Some(e) => e.to_string(),
+            None => "".to_string(),
+        };
+        let _dnf = match table.dnf() {
+            Some(e) => e.to_string(),
+            None => "".to_string(),
+        };
     }
 }
