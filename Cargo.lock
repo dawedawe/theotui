@@ -1434,14 +1434,14 @@ dependencies = [
 
 [[package]]
 name = "theoinf"
-version = "0.4.5"
+version = "0.5.0"
 dependencies = [
  "winnow",
 ]
 
 [[package]]
 name = "theotui"
-version = "0.4.6"
+version = "0.5.0"
 dependencies = [
  "ascii-dag",
  "color-eyre",

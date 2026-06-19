@@ -1,13 +1,13 @@
 [package]
 name = "theotui"
-version = "0.4.6"
+version = "0.5.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
 description = "A TUI to explore theoretical computer science topics."
 
 [dependencies]
-theoinf = { path = "../theoinf", version = "0.4.5"}
+theoinf = { path = "../theoinf", version = "0.5.0"}
 ratatui = "0.30.2"
 color-eyre = "0.6.5"
 strum = "0.28.0"
