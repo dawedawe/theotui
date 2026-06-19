@@ -1,3 +1,27 @@
+## [0.5.0] - 2026-06-19
+
+### 🚀 Features
+
+- *(propositional logic)* Add support for showing the AST
+
+### 🐛 Bug Fixes
+
+- *(dfa)* Allow all navigation keys in the DFA transitions
+- *(propositional logic)* Show AST for literal results, too
+- *(propositional logic)* Fix a stackoverflow in Expr::reduce
+
+### 🚜 Refactor
+
+- *(tui)* Refactor for reuse
+
+### 📚 Documentation
+
+- Update README.md
+
+### ⚙️ Miscellaneous Tasks
+
+- Update ratatui and ratatui-textarea
+
 ## [0.4.6] - 2026-06-14
 
 ### 🚀 Features
