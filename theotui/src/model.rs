@@ -46,6 +46,16 @@ pub(crate) enum PropLogicResultFilter {
     OnlyTrue,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) enum PropLogicFocus {
+    #[default]
+    Formula,
+    Result,
+    Ast,
+    Cnf,
+    Dnf,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct PropositionalLogicModel<'a> {
     pub(crate) formula_textarea: TextArea<'a>,
@@ -53,6 +63,11 @@ pub(crate) struct PropositionalLogicModel<'a> {
     pub(crate) result_filter: Option<PropLogicResultFilter>,
     pub(crate) truth_table_state: TableState,
     pub(crate) truth_table_scroll_state: ScrollbarState,
+    pub(crate) ast_textarea: TextArea<'a>,
+    pub(crate) cnf_textarea: TextArea<'a>,
+    pub(crate) dnf_textarea: TextArea<'a>,
+    pub(crate) focus: PropLogicFocus,
+    pub(crate) show_ast: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

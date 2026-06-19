@@ -369,7 +369,7 @@ pub fn all_assignments(vars: Vec<String>) -> Vec<Assignment> {
 }
 
 /// Construct the [TruthTable] for all possible assignments for the given formula.
-pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
+pub fn truth_table(formula: &str) -> std::result::Result<(Expr, TruthTable), String> {
     let mut input = formula;
     match pratt_parser(&mut input) {
         Ok(expr) => {
@@ -381,7 +381,7 @@ pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
                 let row = (a, r);
                 table.rows.push(row);
             });
-            std::result::Result::Ok(table)
+            std::result::Result::Ok((expr, table))
         }
         ModalResult::Err(_) => std::result::Result::Err("parse error".to_string()),
     }
@@ -390,7 +390,7 @@ pub fn truth_table(formula: &str) -> std::result::Result<TruthTable, String> {
 /// The max_terms (false rows in the truth table) of a formula in CNF
 pub fn max_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
     match truth_table(formula) {
-        Ok(table) => Ok(table.max_terms()),
+        Ok((_, table)) => Ok(table.max_terms()),
         Err(e) => Err(e),
     }
 }
@@ -398,7 +398,7 @@ pub fn max_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
 /// The min_terms (true rows in the truth table) of a formula in DNF
 pub fn min_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
     match truth_table(formula) {
-        Ok(table) => Ok(table.min_terms()),
+        Ok((_, table)) => Ok(table.min_terms()),
         Err(e) => Err(e),
     }
 }
@@ -406,7 +406,7 @@ pub fn min_terms(formula: &str) -> std::result::Result<Vec<Expr>, String> {
 /// The CNF (Conjunctive Normal Form) of the formula, a conjunction of the maxterms.
 pub fn cnf(formula: &str) -> std::result::Result<Option<Expr>, String> {
     match truth_table(formula) {
-        Ok(table) => Ok(table.cnf()),
+        Ok((_, table)) => Ok(table.cnf()),
         Err(e) => Err(e),
     }
 }
@@ -414,7 +414,7 @@ pub fn cnf(formula: &str) -> std::result::Result<Option<Expr>, String> {
 /// The DNF (Disjunctive Normal Form) of the formula, a disjunction of the minterms.
 pub fn dnf(formula: &str) -> std::result::Result<Option<Expr>, String> {
     match truth_table(formula) {
-        Ok(table) => Ok(table.dnf()),
+        Ok((_, table)) => Ok(table.dnf()),
         Err(e) => Err(e),
     }
 }
@@ -674,7 +674,7 @@ mod tests {
     fn truth_table_works() {
         let table = truth_table("a | b");
         assert!(table.is_ok());
-        let table = table.unwrap();
+        let table = table.unwrap().1;
         assert_eq!(table.rows.len(), 4);
         assert!(table.is_sat());
         assert!(!table.is_tautology());

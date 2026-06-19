@@ -1,7 +1,9 @@
 use crate::model::{
-    DfaFocus, DfaResult, Focus, Model, PropLogicResult, PropLogicResultFilter, SelectedTopic,
-    SetTheoryResult, T2GrammarFocus, T2GrammarResult, T3GrammarFocus, T3GrammarResult,
+    DfaFocus, DfaResult, Focus, Model, PropLogicFocus, PropLogicResult, PropLogicResultFilter,
+    SelectedTopic, SetTheoryResult, T2GrammarFocus, T2GrammarResult, T3GrammarFocus,
+    T3GrammarResult,
 };
+use ascii_dag::Graph;
 use ratatui::{
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     widgets::ScrollbarState,
@@ -21,6 +23,7 @@ pub(crate) enum PropLogicMsg {
     FilterFalseRows,
     ScrollUp,
     ScrollDown,
+    ToggleShowAst,
 }
 
 pub(crate) enum SetTheoryMsg {
@@ -80,19 +83,9 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         }
         (_, KeyCode::Tab) => Some(Msg::NextFocus),
         (_, KeyCode::BackTab) => Some(Msg::PrevFocus),
-        (SelectedTopic::PropositionalLogic, KeyCode::Enter)
-        | (SelectedTopic::PropositionalLogic, KeyCode::F(5)) => {
+        (SelectedTopic::PropositionalLogic, KeyCode::F(5)) => {
             Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
         }
-        (SelectedTopic::PropositionalLogic, KeyCode::Up) if model.focus == Focus::TopicContent => {
-            Some(Msg::PropLogicMsg(PropLogicMsg::ScrollUp))
-        }
-        (SelectedTopic::PropositionalLogic, KeyCode::Down)
-            if model.focus == Focus::TopicContent =>
-        {
-            Some(Msg::PropLogicMsg(PropLogicMsg::ScrollDown))
-        }
-        (SelectedTopic::SetTheory, KeyCode::F(5)) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
         (SelectedTopic::PropositionalLogic, KeyCode::Char('f'))
             if key.modifiers.intersects(KeyModifiers::CONTROL) =>
         {
@@ -103,10 +96,51 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
         {
             Some(Msg::PropLogicMsg(PropLogicMsg::FilterTrueRows))
         }
-        (SelectedTopic::PropositionalLogic, _) if model.focus == Focus::TopicContent => {
-            model.proplogic_state.formula_textarea.input(key);
-            None
+        (SelectedTopic::PropositionalLogic, KeyCode::Char('a'))
+            if key.modifiers.intersects(KeyModifiers::CONTROL) =>
+        {
+            Some(Msg::PropLogicMsg(PropLogicMsg::ToggleShowAst))
         }
+        (SelectedTopic::PropositionalLogic, _) if model.focus == Focus::TopicContent => {
+            match model.proplogic_state.focus {
+                PropLogicFocus::Formula => {
+                    if key.code == KeyCode::Enter {
+                        Some(Msg::PropLogicMsg(PropLogicMsg::Eval))
+                    } else {
+                        model.proplogic_state.formula_textarea.input(key);
+                        None
+                    }
+                }
+                PropLogicFocus::Result => {
+                    if key.code == KeyCode::Up {
+                        Some(Msg::PropLogicMsg(PropLogicMsg::ScrollUp))
+                    } else if key.code == KeyCode::Down {
+                        Some(Msg::PropLogicMsg(PropLogicMsg::ScrollDown))
+                    } else {
+                        None
+                    }
+                }
+                PropLogicFocus::Ast => {
+                    if is_nav_keycode(key) {
+                        model.proplogic_state.ast_textarea.input(key);
+                    }
+                    None
+                }
+                PropLogicFocus::Cnf => {
+                    if is_nav_keycode(key) {
+                        model.proplogic_state.cnf_textarea.input(key);
+                    }
+                    None
+                }
+                PropLogicFocus::Dnf => {
+                    if is_nav_keycode(key) {
+                        model.proplogic_state.dnf_textarea.input(key);
+                    }
+                    None
+                }
+            }
+        }
+        (SelectedTopic::SetTheory, KeyCode::F(5)) => Some(Msg::SetTheoryMsg(SetTheoryMsg::Eval)),
         (SelectedTopic::SetTheory, _) if model.focus == Focus::TopicContent => {
             model.settheory_state.term_textarea.input(key);
             None
@@ -196,12 +230,12 @@ fn on_key_event(model: &mut Model, key: KeyEvent) -> Option<Msg> {
     }
 }
 
-fn set_textarea(productions: &mut TextArea, content: String) {
-    productions.select_all();
-    productions.cut();
-    productions.insert_str(content);
-    productions.move_cursor(CursorMove::Top);
-    productions.move_cursor(CursorMove::End);
+fn set_textarea(textarea: &mut TextArea, content: String) {
+    textarea.select_all();
+    textarea.cut();
+    textarea.insert_str(content);
+    textarea.move_cursor(CursorMove::Top);
+    textarea.move_cursor(CursorMove::End);
 }
 
 fn production_chain_to_string(productions: Vec<(String, Vec<String>)>) -> String {
@@ -229,8 +263,24 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Focus::TopicContent => model.focus = Focus::TopicList,
             },
             SelectedTopic::PropositionalLogic => match model.focus {
-                Focus::TopicList => model.focus = Focus::TopicContent,
-                Focus::TopicContent => model.focus = Focus::TopicList,
+                Focus::TopicList => {
+                    model.focus = Focus::TopicContent;
+                    model.proplogic_state.focus = crate::model::PropLogicFocus::Formula;
+                }
+                Focus::TopicContent => match model.proplogic_state.focus {
+                    PropLogicFocus::Formula => {
+                        if model.proplogic_state.show_ast {
+                            model.proplogic_state.focus = PropLogicFocus::Ast;
+                        } else {
+                            model.proplogic_state.focus = PropLogicFocus::Result;
+                        }
+                    }
+                    PropLogicFocus::Result | PropLogicFocus::Ast => {
+                        model.proplogic_state.focus = PropLogicFocus::Cnf
+                    }
+                    PropLogicFocus::Cnf => model.proplogic_state.focus = PropLogicFocus::Dnf,
+                    PropLogicFocus::Dnf => model.focus = Focus::TopicList,
+                },
             },
             SelectedTopic::Dfa => match model.focus {
                 Focus::TopicList => {
@@ -286,8 +336,24 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 Focus::TopicContent => model.focus = Focus::TopicList,
             },
             SelectedTopic::PropositionalLogic => match model.focus {
-                Focus::TopicList => model.focus = Focus::TopicContent,
-                Focus::TopicContent => model.focus = Focus::TopicList,
+                Focus::TopicList => {
+                    model.focus = Focus::TopicContent;
+                    model.proplogic_state.focus = PropLogicFocus::Dnf;
+                }
+                Focus::TopicContent => match model.proplogic_state.focus {
+                    PropLogicFocus::Formula => model.focus = Focus::TopicList,
+                    PropLogicFocus::Result | PropLogicFocus::Ast => {
+                        model.proplogic_state.focus = PropLogicFocus::Formula
+                    }
+                    PropLogicFocus::Cnf => {
+                        if model.proplogic_state.show_ast {
+                            model.proplogic_state.focus = PropLogicFocus::Ast
+                        } else {
+                            model.proplogic_state.focus = PropLogicFocus::Result
+                        }
+                    }
+                    PropLogicFocus::Dnf => model.proplogic_state.focus = PropLogicFocus::Cnf,
+                },
             },
             SelectedTopic::Dfa => match model.focus {
                 Focus::TopicList => {
@@ -358,23 +424,51 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             let formula = model.proplogic_state.formula_textarea.lines();
             let formula = formula.first().map(|w| w.deref()).unwrap_or("");
             let table = theoinf::propositional_logic::truth_table(formula);
-            match table {
-                Ok(table) if !table.rows.is_empty() => {
+            let (r, ast, cnf, dnf) = match table {
+                Ok((expr, table)) if !table.rows.is_empty() => {
                     model.proplogic_state.truth_table_state.select(Some(0));
                     model.proplogic_state.truth_table_scroll_state =
                         ScrollbarState::new(table.rows.len());
-                    model.proplogic_state.result = PropLogicResult::Table(table);
+                    let cnf = match table.cnf() {
+                        Some(e) => e.to_string(),
+                        None => "".to_string(),
+                    };
+                    let dnf = match table.dnf() {
+                        Some(e) => e.to_string(),
+                        None => "".to_string(),
+                    };
+
+                    let dag = expr_to_dag(&expr);
+                    let ast = dag.render();
+
+                    (PropLogicResult::Table(table), ast, cnf, dnf)
                 }
                 Ok(_) => {
                     let assignment: Assignment = HashMap::new();
                     let r = run(formula, &assignment);
-                    model.proplogic_state.result = match r {
-                        Ok(r) => PropLogicResult::Literal(r),
-                        Err(e) => PropLogicResult::Error(e),
+                    match r {
+                        Ok(r) => (PropLogicResult::Literal(r), "".into(), "".into(), "".into()),
+                        Err(e) => (PropLogicResult::Error(e), "".into(), "".into(), "".into()),
                     }
                 }
-                Err(e) => model.proplogic_state.result = PropLogicResult::Error(e),
-            }
+                Err(e) => (PropLogicResult::Error(e), "".into(), "".into(), "".into()),
+            };
+            model.proplogic_state.result = r;
+            set_textarea(&mut model.proplogic_state.ast_textarea, ast);
+            model
+                .proplogic_state
+                .ast_textarea
+                .move_cursor(CursorMove::Jump(0, 0));
+            set_textarea(&mut model.proplogic_state.cnf_textarea, cnf);
+            model
+                .proplogic_state
+                .cnf_textarea
+                .move_cursor(CursorMove::Jump(0, 0));
+            set_textarea(&mut model.proplogic_state.dnf_textarea, dnf);
+            model
+                .proplogic_state
+                .dnf_textarea
+                .move_cursor(CursorMove::Jump(0, 0));
         }
         Msg::PropLogicMsg(PropLogicMsg::ScrollUp) => {
             if let Some(i) = match (
@@ -412,6 +506,18 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
                 model.proplogic_state.truth_table_state.select(Some(i));
                 model.proplogic_state.truth_table_scroll_state =
                     model.proplogic_state.truth_table_scroll_state.position(i);
+            }
+        }
+        Msg::PropLogicMsg(PropLogicMsg::ToggleShowAst) => {
+            model.proplogic_state.show_ast = !model.proplogic_state.show_ast;
+            if model.proplogic_state.show_ast
+                && model.proplogic_state.focus == PropLogicFocus::Result
+            {
+                model.proplogic_state.focus = PropLogicFocus::Ast;
+            }
+            if !model.proplogic_state.show_ast && model.proplogic_state.focus == PropLogicFocus::Ast
+            {
+                model.proplogic_state.focus = PropLogicFocus::Result;
             }
         }
         Msg::SetTheoryMsg(SetTheoryMsg::Eval) => {
@@ -520,4 +626,81 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
             set_textarea(&mut model.t2grammar_state.cnf, cnf);
         }
     }
+}
+
+fn expr_to_dag(expr: &theoinf::propositional_logic::Expr) -> Box<Graph<'_>> {
+    fn traverse<'a>(
+        dag: &mut Box<Graph<'a>>,
+        counter: &mut usize,
+        expr: &'a theoinf::propositional_logic::Expr,
+    ) {
+        *counter += 1;
+        let id = *counter;
+        match expr {
+            theoinf::propositional_logic::Expr::True => {
+                dag.add_node(id, "true");
+            }
+            theoinf::propositional_logic::Expr::False => {
+                dag.add_node(id, "false");
+            }
+            theoinf::propositional_logic::Expr::Var(x) => {
+                dag.add_node(id, x);
+            }
+            theoinf::propositional_logic::Expr::Not(expr) => {
+                dag.add_node(id, "!");
+                traverse(dag, counter, expr);
+                dag.add_edge(id, id + 1, None);
+            }
+            theoinf::propositional_logic::Expr::And(expr1, expr2) => {
+                dag.add_node(id, "&");
+                traverse(dag, counter, expr1);
+                dag.add_edge(id, id + 1, None);
+                let after_expr1 = *counter;
+                traverse(dag, counter, expr2);
+                dag.add_edge(id, after_expr1 + 1, None);
+            }
+            theoinf::propositional_logic::Expr::Or(expr1, expr2) => {
+                dag.add_node(id, "|");
+                traverse(dag, counter, expr1);
+                dag.add_edge(id, id + 1, None);
+                let after_expr1 = *counter;
+                traverse(dag, counter, expr2);
+                dag.add_edge(id, after_expr1 + 1, None);
+            }
+            theoinf::propositional_logic::Expr::Xor(expr1, expr2) => {
+                dag.add_node(id, "^");
+                traverse(dag, counter, expr1);
+                dag.add_edge(id, id + 1, None);
+                let after_expr1 = *counter;
+                traverse(dag, counter, expr2);
+                dag.add_edge(id, after_expr1 + 1, None);
+            }
+            theoinf::propositional_logic::Expr::Equi(expr1, expr2) => {
+                dag.add_node(id, "<=>");
+                traverse(dag, counter, expr1);
+                dag.add_edge(id, id + 1, None);
+                let after_expr1 = *counter;
+                traverse(dag, counter, expr2);
+                dag.add_edge(id, after_expr1 + 1, None);
+            }
+            theoinf::propositional_logic::Expr::Impl(expr1, expr2) => {
+                dag.add_node(id, "->");
+                traverse(dag, counter, expr1);
+                dag.add_edge(id, id + 1, None);
+                let after_expr1 = *counter;
+                traverse(dag, counter, expr2);
+                dag.add_edge(id, after_expr1 + 1, None);
+            }
+            theoinf::propositional_logic::Expr::Paren(expr) => {
+                dag.add_node(id, "()");
+                traverse(dag, counter, expr);
+                dag.add_edge(id, id + 1, None);
+            }
+        }
+    }
+
+    let mut dag = Box::new(Graph::new());
+    let mut counter = 0;
+    traverse(&mut dag, &mut counter, expr);
+    dag
 }

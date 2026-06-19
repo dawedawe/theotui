@@ -1,6 +1,6 @@
 use crate::model::{
-    DfaFocus, DfaResult, Focus, Model, PropLogicResultFilter, SelectedTopic, T2GrammarFocus,
-    T2GrammarResult, T3GrammarFocus, T3GrammarResult,
+    DfaFocus, DfaResult, Focus, Model, PropLogicFocus, PropLogicResultFilter, SelectedTopic,
+    T2GrammarFocus, T2GrammarResult, T3GrammarFocus, T3GrammarResult,
 };
 use ratatui::{
     Frame,
@@ -12,7 +12,7 @@ use ratatui::{
         ScrollbarState, Table,
     },
 };
-use ratatui_textarea::WrapMode;
+use ratatui_textarea::{TextArea, WrapMode};
 use strum::IntoEnumIterator;
 
 fn default_style() -> Style {
@@ -170,6 +170,48 @@ A == B            // equality
 }
 
 fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
+    fn has_focus(model: &Model, focus: PropLogicFocus) -> bool {
+        model.focus == Focus::TopicContent && model.proplogic_state.focus == focus
+    }
+
+    fn create_classification_paragraph<'a>(
+        classification: &'a str,
+        default_style: &'a Style,
+    ) -> Paragraph<'a> {
+        Paragraph::new(classification).style(*default_style).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Classification "),
+        )
+    }
+
+    fn create_result_paragraph<'a>(
+        model: &Model,
+        default_style: &'a Style,
+        result: &str,
+    ) -> Paragraph<'a> {
+        let block = Block::default().borders(Borders::ALL).style(*default_style);
+        let block = if has_focus(model, PropLogicFocus::Result) {
+            block.title(" Result* ").title_style(default_style.bold())
+        } else {
+            block.title(" Result ")
+        };
+        Paragraph::new(result.to_string())
+            .style(*default_style)
+            .block(block)
+    }
+
+    fn create_cnf_dnf(focus: bool, style: &Style, title: &str, textarea: &mut TextArea) {
+        let block = Block::default().borders(Borders::ALL).style(*style);
+        let block = if focus {
+            block.title(format!(" {title}* ")).title_style(style.bold())
+        } else {
+            block.title(format!(" {title} "))
+        };
+        textarea.set_block(block);
+        textarea.set_cursor_line_style(*style);
+    }
+
     let default_style = default_style();
 
     let main_vert_split = Layout::default()
@@ -221,7 +263,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .set_cursor_line_style(default_style);
 
     let formula_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let formula_input_block = if model.focus == Focus::TopicContent {
+    let formula_input_block = if has_focus(model, PropLogicFocus::Formula) {
         formula_input_block
             .title(" Formula φ* ")
             .title_style(default_style.bold())
@@ -236,12 +278,59 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     // render eval result
     match &model.proplogic_state.result {
-        crate::model::PropLogicResult::None => (),
-        crate::model::PropLogicResult::Error(e) => {
-            let result_paragraph = Paragraph::new(e.as_str())
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" Result "));
+        crate::model::PropLogicResult::None => {
+            // render formula classification
+            let classification_paragraph = create_classification_paragraph("", &default_style);
+            frame.render_widget(classification_paragraph, classification_rect);
+
+            // render formula result
+            let result_paragraph = create_result_paragraph(model, &default_style, "");
             frame.render_widget(result_paragraph, result_rect);
+
+            // render cnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Cnf),
+                &default_style,
+                "CNF",
+                &mut model.proplogic_state.cnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
+
+            // render dnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Dnf),
+                &default_style,
+                "DNF",
+                &mut model.proplogic_state.dnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.dnf_textarea, dnf_rect);
+        }
+        crate::model::PropLogicResult::Error(e) => {
+            // render formula classification
+            let classification_paragraph = create_classification_paragraph("", &default_style);
+            frame.render_widget(classification_paragraph, classification_rect);
+
+            // render formula result
+            let result_paragraph = create_result_paragraph(model, &default_style, e.as_str());
+            frame.render_widget(result_paragraph, result_rect);
+
+            // render cnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Cnf),
+                &default_style,
+                "CNF",
+                &mut model.proplogic_state.cnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
+
+            // render dnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Dnf),
+                &default_style,
+                "DNF",
+                &mut model.proplogic_state.dnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.dnf_textarea, dnf_rect);
         }
         crate::model::PropLogicResult::Literal(eval_result) => {
             // render formula classification
@@ -251,18 +340,31 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 "φ ∉ SAT, φ ⊢ ⊥"
             };
             let classification_paragraph =
-                Paragraph::new(classification).style(default_style).block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(" Classification "),
-                );
+                create_classification_paragraph(classification, &default_style);
             frame.render_widget(classification_paragraph, classification_rect);
 
             // render formula result
-            let result_paragraph = Paragraph::new(eval_result.to_string())
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" Result "));
+            let result_paragraph =
+                create_result_paragraph(model, &default_style, &eval_result.to_string());
             frame.render_widget(result_paragraph, result_rect);
+
+            // render cnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Cnf),
+                &default_style,
+                "CNF",
+                &mut model.proplogic_state.cnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
+
+            // render dnf
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Dnf),
+                &default_style,
+                "DNF",
+                &mut model.proplogic_state.dnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.dnf_textarea, dnf_rect);
         }
         crate::model::PropLogicResult::Table(table) if table.rows.is_empty() => {
             panic!("should not happen")
@@ -285,113 +387,135 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 c
             };
             let classification_paragraph =
-                Paragraph::new(classification).style(default_style).block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(" Classification "),
-                );
+                create_classification_paragraph(classification.as_str(), &default_style);
             frame.render_widget(classification_paragraph, classification_rect);
 
-            // render truth table
-            let vars = result_table.vars();
-            let widths = [Constraint::Length(10)].repeat(vars.len() + 2);
-            let header = {
-                let mut header_names = vars.clone();
-                header_names.insert(0, "#".into());
-                header_names.push("result".to_string());
-                header_names
-                    .into_iter()
-                    .map(Cell::from)
-                    .collect::<Row>()
-                    .style(default_style)
-                    .height(1)
-            };
-            let rows: Vec<Row> = result_table
-                .rows
-                .iter()
-                .enumerate()
-                .filter_map(|(idx, (assignment, result))| {
-                    let show_row = match model.proplogic_state.result_filter {
-                        Some(PropLogicResultFilter::OnlyFalse) => !*result,
-                        Some(PropLogicResultFilter::OnlyTrue) => *result,
-                        _ => true,
-                    };
-                    if show_row {
-                        let mut bools = vec![];
-                        bools.push((idx + 1).to_string());
-                        vars.iter()
-                            .for_each(|var| bools.push(assignment[var].to_string()));
-                        bools.push(result.to_string());
-                        Some(
-                            bools.into_iter().map(Cell::from).collect::<Row>(), // .style(row_style),
-                        )
-                    } else {
-                        None
-                    }
-                })
-                .enumerate()
-                .map(|(idx, row)| {
-                    let row_style = match idx % 2 {
-                        0 => default_style,
-                        _ => default_style.bg(Color::Indexed(236u8)),
-                    };
-                    row.style(row_style)
-                })
-                .collect();
+            // render AST or truth table
+            if model.proplogic_state.show_ast {
+                model
+                    .proplogic_state
+                    .ast_textarea
+                    .set_cursor_line_style(default_style);
+                let block = Block::default().borders(Borders::ALL).style(default_style);
+                let block = if has_focus(model, PropLogicFocus::Ast) {
+                    block.title(" AST* ").title_style(default_style.bold())
+                } else {
+                    block.title(" AST ")
+                };
 
-            let table = {
-                let vars_count = result_table.vars().len();
-                let rows_count = result_table.rows.len();
-                let true_rows_count = result_table.rows.iter().filter(|r| r.1).count();
-                let false_rows_count = rows_count - true_rows_count;
-                let title = format!(
-                    " Result: {vars_c} vars, {rows_c} rows ({true_c} true, {false_c} false){filter} ",
-                    vars_c = vars_count,
-                    rows_c = rows_count,
-                    true_c = true_rows_count,
-                    false_c = false_rows_count,
-                    filter = match model.proplogic_state.result_filter {
-                        Some(PropLogicResultFilter::OnlyFalse) => ", filter: only false",
-                        Some(PropLogicResultFilter::OnlyTrue) => ", filter: only true",
-                        None => "",
-                    }
+                model.proplogic_state.ast_textarea.set_block(block);
+                frame.render_widget(&model.proplogic_state.ast_textarea, result_rect);
+            } else {
+                let vars = result_table.vars();
+                let widths = [Constraint::Length(10)].repeat(vars.len() + 2);
+                let header = {
+                    let mut header_names = vars.clone();
+                    header_names.insert(0, "#".into());
+                    header_names.push("result".to_string());
+                    header_names
+                        .into_iter()
+                        .map(Cell::from)
+                        .collect::<Row>()
+                        .style(default_style)
+                        .height(1)
+                };
+                let rows: Vec<Row> = result_table
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(idx, (assignment, result))| {
+                        let show_row = match model.proplogic_state.result_filter {
+                            Some(PropLogicResultFilter::OnlyFalse) => !*result,
+                            Some(PropLogicResultFilter::OnlyTrue) => *result,
+                            _ => true,
+                        };
+                        if show_row {
+                            let mut bools = vec![];
+                            bools.push((idx + 1).to_string());
+                            vars.iter()
+                                .for_each(|var| bools.push(assignment[var].to_string()));
+                            bools.push(result.to_string());
+                            Some(
+                                bools.into_iter().map(Cell::from).collect::<Row>(), // .style(row_style),
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                    .enumerate()
+                    .map(|(idx, row)| {
+                        let row_style = match idx % 2 {
+                            0 => default_style,
+                            _ => default_style.bg(Color::Indexed(236u8)),
+                        };
+                        row.style(row_style)
+                    })
+                    .collect();
+
+                let table = {
+                    let block = {
+                        let vars_count = result_table.vars().len();
+                        let rows_count = result_table.rows.len();
+                        let true_rows_count = result_table.rows.iter().filter(|r| r.1).count();
+                        let false_rows_count = rows_count - true_rows_count;
+                        let mut title = format!(
+                            " Result: {vars_c} vars, {rows_c} rows ({true_c} true, {false_c} false){filter}",
+                            vars_c = vars_count,
+                            rows_c = rows_count,
+                            true_c = true_rows_count,
+                            false_c = false_rows_count,
+                            filter = match model.proplogic_state.result_filter {
+                                Some(PropLogicResultFilter::OnlyFalse) => ", filter: only false",
+                                Some(PropLogicResultFilter::OnlyTrue) => ", filter: only true",
+                                None => "",
+                            }
+                        );
+                        if has_focus(model, PropLogicFocus::Result) {
+                            title.push_str("* ");
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(title)
+                                .title_style(default_style.bold())
+                        } else {
+                            title.push(' ');
+                            Block::default().borders(Borders::ALL).title(title)
+                        }
+                    };
+                    Table::new(rows, widths)
+                        .header(header)
+                        .style(default_style)
+                        .block(block)
+                };
+                frame.render_stateful_widget(
+                    table,
+                    result_rect,
+                    &mut model.proplogic_state.truth_table_state,
                 );
-                Table::new(rows, widths)
-                    .header(header)
-                    .style(default_style)
-                    .block(Block::default().borders(Borders::ALL).title(title))
-            };
-            frame.render_stateful_widget(
-                table,
-                result_rect,
-                &mut model.proplogic_state.truth_table_state,
-            );
 
-            render_scrollbar(
-                frame,
-                result_rect,
-                &mut model.proplogic_state.truth_table_scroll_state,
-            );
+                render_scrollbar(
+                    frame,
+                    result_rect,
+                    &mut model.proplogic_state.truth_table_scroll_state,
+                );
+            }
 
             // render cnf
-            let cnf = match result_table.cnf() {
-                Some(e) => e.to_string(),
-                None => "".to_string(),
-            };
-            let cnf_paragraph = Paragraph::new(cnf)
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" CNF "));
-            frame.render_widget(cnf_paragraph, cnf_rect);
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Cnf),
+                &default_style,
+                "CNF",
+                &mut model.proplogic_state.cnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
 
             // render dnf
-            let dnf = match result_table.dnf() {
-                Some(e) => e.to_string(),
-                None => "".to_string(),
-            };
-            let dnf_paragraph = Paragraph::new(dnf)
-                .style(default_style)
-                .block(Block::default().borders(Borders::ALL).title(" DNF "));
-            frame.render_widget(dnf_paragraph, dnf_rect);
+            create_cnf_dnf(
+                has_focus(model, PropLogicFocus::Dnf),
+                &default_style,
+                "DNF",
+                &mut model.proplogic_state.dnf_textarea,
+            );
+            frame.render_widget(&model.proplogic_state.dnf_textarea, dnf_rect);
         }
     };
 
@@ -424,6 +548,8 @@ p -> q  // implication";
         Span::styled("Ctrl-f | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Scroll: "),
         Span::styled("↑/↓ | ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("Show AST: "),
+        Span::styled("Ctrl-a | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Help: "),
         Span::styled("F1 | ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw("Exit: "),
