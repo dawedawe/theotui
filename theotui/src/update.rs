@@ -442,11 +442,13 @@ pub(crate) fn update(model: &mut Model, msg: Msg) {
 
                     (PropLogicResult::Table(table), ast, cnf, dnf)
                 }
-                Ok(_) => {
+                Ok((expr, _table)) => {
+                    let dag = expr_to_dag(&expr);
+                    let ast = dag.render();
                     let assignment: Assignment = HashMap::new();
                     let r = run(formula, &assignment);
                     match r {
-                        Ok(r) => (PropLogicResult::Literal(r), "".into(), "".into(), "".into()),
+                        Ok(r) => (PropLogicResult::Literal(r), ast, "".into(), "".into()),
                         Err(e) => (PropLogicResult::Error(e), "".into(), "".into(), "".into()),
                     }
                 }

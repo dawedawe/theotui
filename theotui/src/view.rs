@@ -176,32 +176,28 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     fn create_classification_paragraph<'a>(
         classification: &'a str,
-        default_style: &'a Style,
+        style: &'a Style,
     ) -> Paragraph<'a> {
-        Paragraph::new(classification).style(*default_style).block(
+        Paragraph::new(classification).style(*style).block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(" Classification "),
         )
     }
 
-    fn create_result_paragraph<'a>(
-        model: &Model,
-        default_style: &'a Style,
-        result: &str,
-    ) -> Paragraph<'a> {
-        let block = Block::default().borders(Borders::ALL).style(*default_style);
+    fn create_result_paragraph<'a>(model: &Model, style: &'a Style, result: &str) -> Paragraph<'a> {
+        let block = Block::default().borders(Borders::ALL).style(*style);
         let block = if has_focus(model, PropLogicFocus::Result) {
-            block.title(" Result* ").title_style(default_style.bold())
+            block.title(" Result* ").title_style(style.bold())
         } else {
             block.title(" Result ")
         };
         Paragraph::new(result.to_string())
-            .style(*default_style)
+            .style(*style)
             .block(block)
     }
 
-    fn create_cnf_dnf(focus: bool, style: &Style, title: &str, textarea: &mut TextArea) {
+    fn setblock_cnf_dnf(focus: bool, style: &Style, title: &str, textarea: &mut TextArea) {
         let block = Block::default().borders(Borders::ALL).style(*style);
         let block = if focus {
             block.title(format!(" {title}* ")).title_style(style.bold())
@@ -210,6 +206,21 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         };
         textarea.set_block(block);
         textarea.set_cursor_line_style(*style);
+    }
+
+    fn setblock_ast(model: &mut Model, style: &Style) {
+        model
+            .proplogic_state
+            .ast_textarea
+            .set_cursor_line_style(*style);
+        let block = Block::default().borders(Borders::ALL).style(*style);
+        let block = if has_focus(model, PropLogicFocus::Ast) {
+            block.title(" AST* ").title_style(style.bold())
+        } else {
+            block.title(" AST ")
+        };
+
+        model.proplogic_state.ast_textarea.set_block(block);
     }
 
     let default_style = default_style();
@@ -288,7 +299,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(result_paragraph, result_rect);
 
             // render cnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Cnf),
                 &default_style,
                 "CNF",
@@ -297,7 +308,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
 
             // render dnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Dnf),
                 &default_style,
                 "DNF",
@@ -315,7 +326,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(result_paragraph, result_rect);
 
             // render cnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Cnf),
                 &default_style,
                 "CNF",
@@ -324,7 +335,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
 
             // render dnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Dnf),
                 &default_style,
                 "DNF",
@@ -343,13 +354,19 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
                 create_classification_paragraph(classification, &default_style);
             frame.render_widget(classification_paragraph, classification_rect);
 
-            // render formula result
-            let result_paragraph =
-                create_result_paragraph(model, &default_style, &eval_result.to_string());
-            frame.render_widget(result_paragraph, result_rect);
+            // render AST or result
+            if model.proplogic_state.show_ast {
+                setblock_ast(model, &default_style);
+                frame.render_widget(&model.proplogic_state.ast_textarea, result_rect);
+            } else {
+                // render formula result
+                let result_paragraph =
+                    create_result_paragraph(model, &default_style, &eval_result.to_string());
+                frame.render_widget(result_paragraph, result_rect);
+            }
 
             // render cnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Cnf),
                 &default_style,
                 "CNF",
@@ -358,7 +375,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
 
             // render dnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Dnf),
                 &default_style,
                 "DNF",
@@ -392,18 +409,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
             // render AST or truth table
             if model.proplogic_state.show_ast {
-                model
-                    .proplogic_state
-                    .ast_textarea
-                    .set_cursor_line_style(default_style);
-                let block = Block::default().borders(Borders::ALL).style(default_style);
-                let block = if has_focus(model, PropLogicFocus::Ast) {
-                    block.title(" AST* ").title_style(default_style.bold())
-                } else {
-                    block.title(" AST ")
-                };
-
-                model.proplogic_state.ast_textarea.set_block(block);
+                setblock_ast(model, &default_style);
                 frame.render_widget(&model.proplogic_state.ast_textarea, result_rect);
             } else {
                 let vars = result_table.vars();
@@ -500,7 +506,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             }
 
             // render cnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Cnf),
                 &default_style,
                 "CNF",
@@ -509,7 +515,7 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             frame.render_widget(&model.proplogic_state.cnf_textarea, cnf_rect);
 
             // render dnf
-            create_cnf_dnf(
+            setblock_cnf_dnf(
                 has_focus(model, PropLogicFocus::Dnf),
                 &default_style,
                 "DNF",
