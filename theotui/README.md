@@ -26,7 +26,8 @@ All the usual operations of propositional logic are implemented.
 Press `F1` to toggle the help next to the editor.  
 Press `F5` or `Enter` to let your formula be evaluated.  
 The truth table can be filtered with `Ctrl-t`/`Ctrl-f` to only show the assignments resulting in true or false.  
-The CNF and DNF are constructed if possible.
+The CNF and DNF are constructed if possible.  
+Press `Ctrl-a` to toggle the showing of the AST.
 
 <img src="https://codeberg.org/dawe/theotui/raw/commit/715128adf26fdc4209ad70f72353919297efbcfc/theotui/images/propositional_logic.png" alt="propositional logic">
 
