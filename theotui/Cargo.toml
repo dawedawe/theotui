@@ -8,8 +8,8 @@ description = "A TUI to explore theoretical computer science topics."
 
 [dependencies]
 theoinf = { path = "../theoinf", version = "0.4.5"}
-ratatui = "0.30.1"
+ratatui = "0.30.2"
 color-eyre = "0.6.5"
 strum = "0.28.0"
-ratatui-textarea = "0.9.1"
+ratatui-textarea = "0.9.2"
 ascii-dag = "0.9.1"
