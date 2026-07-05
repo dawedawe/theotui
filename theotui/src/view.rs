@@ -5,7 +5,7 @@ use crate::model::{
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Modifier, Style, Styled},
+    style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{
         Block, Borders, Cell, List, ListState, Paragraph, Row, Scrollbar, ScrollbarOrientation,
@@ -18,6 +18,7 @@ use strum::IntoEnumIterator;
 fn default_style() -> Style {
     Style::default().fg(Color::Green)
 }
+
 pub(crate) fn view(model: &mut Model, frame: &mut Frame) {
     let default_style = default_style();
 
@@ -107,12 +108,10 @@ fn render_settheory(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .set_cursor_line_style(default_style);
 
     let editor_block = Block::default().borders(Borders::ALL).style(default_style);
-    let editor_block = if model.focus == Focus::TopicContent {
-        editor_block
-            .title(" Term* ")
-            .title_style(default_style.bold())
-    } else {
-        editor_block.title(" Term ")
+    let editor_block = {
+        let has_focus = model.focus == Focus::TopicContent;
+        let title = " Term";
+        apply_title(editor_block, has_focus, title, default_style)
     };
     model.settheory_state.term_textarea.set_block(editor_block);
     frame.render_widget(&model.settheory_state.term_textarea, term_rect);
@@ -187,10 +186,10 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     fn create_result_paragraph<'a>(model: &Model, style: &'a Style, result: &str) -> Paragraph<'a> {
         let block = Block::default().borders(Borders::ALL).style(*style);
-        let block = if has_focus(model, PropLogicFocus::Result) {
-            block.title(" Result* ").title_style(style.bold())
-        } else {
-            block.title(" Result ")
+        let block = {
+            let has_focus = has_focus(model, PropLogicFocus::Result);
+            let title = " Result";
+            apply_title(block, has_focus, title, *style)
         };
         Paragraph::new(result.to_string())
             .style(*style)
@@ -199,10 +198,9 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     fn setblock_cnf_dnf(focus: bool, style: &Style, title: &str, textarea: &mut TextArea) {
         let block = Block::default().borders(Borders::ALL).style(*style);
-        let block = if focus {
-            block.title(format!(" {title}* ")).title_style(style.bold())
-        } else {
-            block.title(format!(" {title} "))
+        let block = {
+            let title = format!(" {title}");
+            apply_title(block, focus, title.as_str(), *style)
         };
         textarea.set_block(block);
         textarea.set_cursor_line_style(*style);
@@ -214,10 +212,10 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
             .ast_textarea
             .set_cursor_line_style(*style);
         let block = Block::default().borders(Borders::ALL).style(*style);
-        let block = if has_focus(model, PropLogicFocus::Ast) {
-            block.title(" AST* ").title_style(style.bold())
-        } else {
-            block.title(" AST ")
+        let block = {
+            let has_focus = has_focus(model, PropLogicFocus::Ast);
+            let title = " AST";
+            apply_title(block, has_focus, title, *style)
         };
 
         model.proplogic_state.ast_textarea.set_block(block);
@@ -274,12 +272,10 @@ fn render_proplogic(frame: &mut Frame, rect: Rect, model: &mut Model) {
         .set_cursor_line_style(default_style);
 
     let formula_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let formula_input_block = if has_focus(model, PropLogicFocus::Formula) {
-        formula_input_block
-            .title(" Formula φ* ")
-            .title_style(default_style.bold())
-    } else {
-        formula_input_block.title(" Formula φ ")
+    let formula_input_block = {
+        let has_focus = has_focus(model, PropLogicFocus::Formula);
+        let title = " Formula φ";
+        apply_title(formula_input_block, has_focus, title, default_style)
     };
     model
         .proplogic_state
@@ -632,14 +628,12 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     // render definition textarea
     let definition_block = Block::default().borders(Borders::ALL).style(default_style);
-    let definition_block =
-        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Definition {
-            definition_block
-                .title(" Definition* ")
-                .title_style(default_style.bold())
-        } else {
-            definition_block.title(" Definition ")
-        };
+    let definition_block = {
+        let has_focus =
+            model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::Definition;
+        let title = " Definition";
+        apply_title(definition_block, has_focus, title, default_style)
+    };
     model
         .dfa_state
         .definition_textarea
@@ -648,14 +642,12 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
 
     // render word input textarea
     let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let word_input_block =
-        if model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::WordInput {
-            word_input_block
-                .title(" Word* ")
-                .title_style(default_style.bold())
-        } else {
-            word_input_block.title(" Word ")
-        };
+    let word_input_block = {
+        let has_focus =
+            model.focus == Focus::TopicContent && model.dfa_state.focus == DfaFocus::WordInput;
+        let title = " Word";
+        apply_title(word_input_block, has_focus, title, default_style)
+    };
     model
         .dfa_state
         .input_word_textarea
@@ -672,15 +664,7 @@ fn render_dfa(frame: &mut Frame, rect: Rect, model: &mut Model) {
         if show_count {
             title.push_str(format!(" ({count})").as_str());
         }
-        if has_focus {
-            title.push_str("* ");
-            transitions_block
-                .title(title)
-                .set_style(default_style.bold())
-        } else {
-            title.push(' ');
-            transitions_block.title(title)
-        }
+        apply_title(transitions_block, has_focus, title.as_str(), default_style)
     };
     model.dfa_state.transitions.set_block(transitions_block);
     frame.render_widget(&model.dfa_state.transitions, transitions_rect);
@@ -796,14 +780,11 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
 
     // render definition textarea
     let definition_block = Block::default().borders(Borders::ALL).style(default_style);
-    let definition_block = if model.focus == Focus::TopicContent
-        && model.t3grammar_state.focus == T3GrammarFocus::Definition
-    {
-        definition_block
-            .title(" Definition G* ")
-            .title_style(default_style.bold())
-    } else {
-        definition_block.title(" Definition G ")
+    let definition_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t3grammar_state.focus == T3GrammarFocus::Definition;
+        let title = " Definition G";
+        apply_title(definition_block, has_focus, title, default_style)
     };
     model
         .t3grammar_state
@@ -813,14 +794,11 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
 
     // render word input textarea
     let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let word_input_block = if model.focus == Focus::TopicContent
-        && model.t3grammar_state.focus == T3GrammarFocus::WordInput
-    {
-        word_input_block
-            .title(" Word w* ")
-            .title_style(default_style.bold())
-    } else {
-        word_input_block.title(" Word w ")
+    let word_input_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t3grammar_state.focus == T3GrammarFocus::WordInput;
+        let title = " Word w";
+        apply_title(word_input_block, has_focus, title, default_style)
     };
     model
         .t3grammar_state
@@ -841,15 +819,7 @@ fn render_t3grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
         if count > 0 {
             title.push_str(format!(" ({count})").as_str());
         }
-        if has_focus {
-            title.push_str("* ");
-            productions_block
-                .title(title)
-                .set_style(default_style.bold())
-        } else {
-            title.push(' ');
-            productions_block.title(title)
-        }
+        apply_title(productions_block, has_focus, title.as_str(), default_style)
     };
     model
         .t3grammar_state
@@ -989,14 +959,11 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
 
     // render definition textarea
     let definition_block = Block::default().borders(Borders::ALL).style(default_style);
-    let definition_block = if model.focus == Focus::TopicContent
-        && model.t2grammar_state.focus == T2GrammarFocus::Definition
-    {
-        definition_block
-            .title(" Definition G* ")
-            .title_style(default_style.bold())
-    } else {
-        definition_block.title(" Definition G ")
+    let definition_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t2grammar_state.focus == T2GrammarFocus::Definition;
+        let title = " Definition G";
+        apply_title(definition_block, has_focus, title, default_style)
     };
     model
         .t2grammar_state
@@ -1006,14 +973,11 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
 
     // render word input textarea
     let word_input_block = Block::default().borders(Borders::ALL).style(default_style);
-    let word_input_block = if model.focus == Focus::TopicContent
-        && model.t2grammar_state.focus == T2GrammarFocus::WordInput
-    {
-        word_input_block
-            .title(" Word w* ")
-            .title_style(default_style.bold())
-    } else {
-        word_input_block.title(" Word w ")
+    let word_input_block = {
+        let has_focus = model.focus == Focus::TopicContent
+            && model.t2grammar_state.focus == T2GrammarFocus::WordInput;
+        let title = " Word w";
+        apply_title(word_input_block, has_focus, title, default_style)
     };
     model
         .t2grammar_state
@@ -1026,16 +990,8 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
     let productions_block = {
         let has_focus = model.focus == Focus::TopicContent
             && model.t2grammar_state.focus == T2GrammarFocus::Productions;
-        let mut title = " Productions".to_string();
-        if has_focus {
-            title.push_str("* ");
-            productions_block
-                .title(title)
-                .set_style(default_style.bold())
-        } else {
-            title.push(' ');
-            productions_block.title(title)
-        }
+        let title = " Productions";
+        apply_title(productions_block, has_focus, title, default_style)
     };
     model
         .t2grammar_state
@@ -1048,16 +1004,8 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
     let cyk_productions_block = {
         let has_focus = model.focus == Focus::TopicContent
             && model.t2grammar_state.focus == T2GrammarFocus::CykProductions;
-        let mut title = " CYK Productions".to_string();
-        if has_focus {
-            title.push_str("* ");
-            cyk_productions_block
-                .title(title)
-                .set_style(default_style.bold())
-        } else {
-            title.push(' ');
-            cyk_productions_block.title(title)
-        }
+        let title = " CYK Productions";
+        apply_title(cyk_productions_block, has_focus, title, default_style)
     };
     model
         .t2grammar_state
@@ -1070,14 +1018,8 @@ fn render_t2grammar(frame: &mut Frame<'_>, rect: Rect, model: &mut Model<'_>) {
     let cnf_block = {
         let has_focus = model.focus == Focus::TopicContent
             && model.t2grammar_state.focus == T2GrammarFocus::Cnf;
-        let mut title = " Chomsky NF of G".to_string();
-        if has_focus {
-            title.push_str("* ");
-            cnf_block.title(title).set_style(default_style.bold())
-        } else {
-            title.push(' ');
-            cnf_block.title(title)
-        }
+        let title = " Chomsky NF of G";
+        apply_title(cnf_block, has_focus, title, default_style)
     };
     model.t2grammar_state.cnf.set_block(cnf_block);
     frame.render_widget(&model.t2grammar_state.cnf, cnf_rect);
@@ -1137,4 +1079,19 @@ fn render_scrollbar(frame: &mut Frame, area: Rect, scroll_state: &mut ScrollbarS
         }),
         scroll_state,
     );
+}
+
+fn apply_title<'a>(
+    block: Block<'a>,
+    has_focus: bool,
+    title: &str,
+    title_style: Style,
+) -> Block<'a> {
+    if has_focus {
+        block
+            .title(format!("{}* ", title))
+            .title_style(title_style.bold())
+    } else {
+        block.title(format!("{} ", title))
+    }
 }
